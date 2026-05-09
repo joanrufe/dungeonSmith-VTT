@@ -26,7 +26,7 @@ function showFlourish(text, color) {
   }
 }
 
-function showResult(text, color = '#4CAF50') {
+function showResult(text, color = '#ff7a18') {
   if (resultLog) { resultLog.innerText = `Last Roll: ${text}`; resultLog.style.color = color; }
   showFlourish(text, color);
 }
@@ -83,18 +83,18 @@ async function initDiceBox() {
           showResult(pendingResult.text, pendingResult.color);
           pendingResult = null;
         }
-        // Auto-clear after 30 s
+        // Auto-clear after 10 s
         clearTimeout(autoClearTimer);
         autoClearTimer = setTimeout(() => {
           if (diceBox) diceBox.clearDice();
           if (socket && !silentCheck?.checked) socket.emit('clearDice');
-        }, 30000);
+        }, 10000);
       },
     });
 
     await instance.initialize();
     diceBox = instance;
-    updateStatus('Ready', '#4CAF50');
+    updateStatus('Ready', '#ff7a18');
   } catch (err) {
     diceBox = null;
     updateStatus('Error – see console', '#f44336');
@@ -117,7 +117,7 @@ function handleRoll(notation) {
       const total    = Array.from({ length: qty }, () => Math.floor(Math.random() * sides) + 1)
                            .reduce((a, b) => a + b, 0) + modifier;
       const modStr   = modifier > 0 ? `+${modifier}` : modifier < 0 ? `${modifier}` : '';
-      showFlourish(`${qty}d${sides}${modStr} = ${total}`, '#4CAF50');
+      showFlourish(`${qty}d${sides}${modStr} = ${total}`, '#ff7a18');
     }
     return;
   }

@@ -6,7 +6,9 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 
 const MEDIA_DIR = path.join(__dirname, 'public', 'media');
-const SECRET_FILE = path.join(__dirname, 'secret.txt');
+const SECRET_DIR = path.join(__dirname, 'data', 'private');
+const SECRET_FILE = path.join(SECRET_DIR, 'secrets.txt');
+const LEGACY_SECRET_FILE = path.join(__dirname, 'secret.txt');
 const DEFAULT_SECRETS = {
   DM_PASSWORD: 'CODE',
   PLAYER_PASSWORD: 'PLAY',
@@ -22,6 +24,7 @@ const MEDIA_EXTS = new Set([...IMAGE_EXTS, ...VIDEO_EXTS, ...DOC_EXTS]);
 const sceneController = require('./controllers/sceneController');
 const uploadController = require('./controllers/uploadController');
 const musicController = require('./controllers/musicController');
+const stickyNotesController = require('./controllers/stickyNotesController');
 
 // Middleware to check if user is authenticated as DM
 function checkDMAuth(req, res, next) {
@@ -68,6 +71,30 @@ function formatSecrets(secrets) {
     `PLAYER_PASSWORD=${secrets.PLAYER_PASSWORD || DEFAULT_SECRETS.PLAYER_PASSWORD}`,
     '',
   ].join('\n');
+}
+
+async function ensureSecretStorage() {
+  await fsPromises.mkdir(SECRET_DIR, { recursive: true });
+
+  if (!fs.existsSync(SECRET_FILE) && fs.existsSync(LEGACY_SECRET_FILE)) {
+    try {
+      await fsPromises.rename(LEGACY_SECRET_FILE, SECRET_FILE);
+    } catch {
+      await fsPromises.copyFile(LEGACY_SECRET_FILE, SECRET_FILE);
+      await fsPromises.unlink(LEGACY_SECRET_FILE);
+    }
+  }
+}
+
+async function readSecretsFile() {
+  await ensureSecretStorage();
+  try {
+    return parseSecrets(await fsPromises.readFile(SECRET_FILE, 'utf8'));
+  } catch {
+    const secrets = { ...DEFAULT_SECRETS };
+    await fsPromises.writeFile(SECRET_FILE, formatSecrets(secrets), 'utf8');
+    return secrets;
+  }
 }
 
 function getMediaType(name) {
@@ -233,12 +260,7 @@ router.delete('/mediaFile', checkDMAuth, async (req, res) => {
 
 router.get('/passwords', checkDMAuth, async (req, res) => {
   try {
-    let secrets = { ...DEFAULT_SECRETS };
-    try {
-      secrets = parseSecrets(await fsPromises.readFile(SECRET_FILE, 'utf8'));
-    } catch {
-      await fsPromises.writeFile(SECRET_FILE, formatSecrets(secrets), 'utf8');
-    }
+    const secrets = await readSecretsFile();
     res.json({
       dmPassword: secrets.DM_PASSWORD || DEFAULT_SECRETS.DM_PASSWORD,
       playerPassword: secrets.PLAYER_PASSWORD || DEFAULT_SECRETS.PLAYER_PASSWORD,
@@ -256,6 +278,7 @@ router.put('/passwords', checkDMAuth, async (req, res) => {
   }
 
   try {
+    await ensureSecretStorage();
     const secrets = {
       DM_PASSWORD: dmPassword,
       PLAYER_PASSWORD: playerPassword,
@@ -273,5 +296,9 @@ router.put('/passwords', checkDMAuth, async (req, res) => {
 router.post('/uploadMusic', checkDMAuth, musicController.uploadMusic);
 router.get('/musicList', musicController.getMusicList); // Players can get music list
 router.post('/deleteMusic', checkDMAuth, musicController.deleteMusic);
+
+// Sticky Notes Routes (DM only)
+router.get('/sticky-notes',  checkDMAuth, stickyNotesController.getNotes);
+router.post('/sticky-notes', checkDMAuth, stickyNotesController.saveNotes);
 
 module.exports = router;

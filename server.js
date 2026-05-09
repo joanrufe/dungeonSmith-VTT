@@ -7,7 +7,9 @@ const socketIo = require('socket.io');
 const server = http.createServer(app);
 const io = socketIo(server);
 
-const secretFile = path.join(__dirname, 'secret.txt');
+const secretDir = path.join(__dirname, 'data', 'private');
+const secretFile = path.join(secretDir, 'secrets.txt');
+const legacySecretFile = path.join(__dirname, 'secret.txt');
 const defaultSecrets = {
   DM_PASSWORD: 'CODE',
   PLAYER_PASSWORD: 'PLAY',
@@ -43,10 +45,25 @@ function formatSecrets(secrets) {
   ].join('\n');
 }
 
+function ensureSecretStorage() {
+  fs.mkdirSync(secretDir, { recursive: true });
+
+  if (!fs.existsSync(secretFile) && fs.existsSync(legacySecretFile)) {
+    try {
+      fs.renameSync(legacySecretFile, secretFile);
+    } catch {
+      fs.copyFileSync(legacySecretFile, secretFile);
+      fs.unlinkSync(legacySecretFile);
+    }
+  }
+}
+
 let secrets = { ...defaultSecrets };
 try {
+  ensureSecretStorage();
   secrets = parseSecrets(fs.readFileSync(secretFile, 'utf8'));
 } catch {
+  ensureSecretStorage();
   fs.writeFileSync(secretFile, formatSecrets(secrets), 'utf8');
 }
 
@@ -58,12 +75,20 @@ app.locals.dmPassword = secrets.DM_PASSWORD || defaultSecrets.DM_PASSWORD;
 app.locals.playerPassword = secrets.PLAYER_PASSWORD || defaultSecrets.PLAYER_PASSWORD;
 
 console.log(`${bold}Passwords loaded from:${reset} ${secretFile}`);
+console.log(`${bold}Project folder:${reset} ${__dirname}`);
+console.log(`${bold}Public folder:${reset} ${path.join(__dirname, 'public')}`);
 console.log(`${bold}DM Password:${reset} ${green}${app.locals.dmPassword}${reset}`);
 console.log(`${bold}Player Password:${reset} ${green}${app.locals.playerPassword}${reset}`);
 
 require('./socketHandler')(io);
 
-const PORT = process.env.PORT || 3000;
+function parsePort(value) {
+  const port = Number.parseInt(value, 10);
+  if (Number.isInteger(port) && port > 0 && port <= 65535) return port;
+  return 3000;
+}
+
+const PORT = parsePort(process.argv[2] || process.env.PORT);
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

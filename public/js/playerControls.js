@@ -16,8 +16,8 @@
 
     btn.addEventListener('click', () => {
       const isHidden = panel.classList.toggle('panel-hidden');
-      btn.style.background  = isHidden ? 'rgba(255,255,255,0.1)' : 'rgba(92,138,255,0.5)';
-      btn.style.borderColor = isHidden ? 'rgba(255,255,255,0.2)' : '#5c8aff';
+      btn.style.background  = isHidden ? '#151515' : '#c62828';
+      btn.style.borderColor = isHidden ? 'rgba(255,255,255,0.16)' : '#c62828';
     });
   }
 

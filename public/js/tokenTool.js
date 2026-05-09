@@ -10,6 +10,7 @@
       bindTokenTool(sc);
     }
     tryBind();
+    setupStatusPopup();
   });
 
   function getContext() {
@@ -88,6 +89,21 @@
             movingEl.style.top  = `${(movingToken.y + renderer.offsetY) * renderer.scale}px`;
           }
 
+          const hpBarEl = document.getElementById(`hpbar-${movingToken.tokenId}`);
+          if (hpBarEl) {
+            hpBarEl.style.left = `${(movingToken.x + renderer.offsetX) * renderer.scale}px`;
+            hpBarEl.style.top  = `${(movingToken.y + renderer.offsetY) * renderer.scale - 9}px`;
+          }
+
+          const condEl = document.getElementById(`cond-${movingToken.tokenId}`);
+          if (condEl) {
+            const fsize       = parseFloat(condEl.style.fontSize) || 22;
+            const totalOffset = 6 + 3 + (fsize + 2) + 2; // BAR_H + BAR_GAP + labelH + LABEL_GAP
+            condEl.style.left  = `${(movingToken.x + renderer.offsetX) * renderer.scale}px`;
+            condEl.style.top   = `${(movingToken.y + renderer.offsetY) * renderer.scale - totalOffset}px`;
+            condEl.style.width = `${movingToken.width * renderer.scale}px`;
+          }
+
           ctx.socket.emit('updateToken', {
             sceneId:    movingToken.sceneId,
             tokenId:    movingToken.tokenId,
@@ -108,5 +124,78 @@
       tokenEl.addEventListener('pointerup',     onUp);
       tokenEl.addEventListener('pointercancel', onUp);
     });
+
+    sc.addEventListener('contextmenu', (e) => {
+      if (!window.VTT_DM) return;
+      if (window.VTT_ACTIVE_PAINT_TOOL) return;
+      const tokenEl = e.target.closest('.token');
+      if (!tokenEl || tokenEl.classList.contains('paint-tile-el')) return;
+      e.preventDefault();
+      showStatusPopup(e.clientX, e.clientY, tokenEl.dataset.tokenId);
+    });
+  }
+  let _statusTokenId = null;
+
+  function setupStatusPopup() {
+    const popup = document.getElementById('token-status-popup');
+    if (!popup) return;
+
+    document.addEventListener('pointerdown', (e) => {
+      if (popup.style.display === 'block' && !popup.contains(e.target))
+        popup.style.display = 'none';
+    }, true);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') popup.style.display = 'none';
+    });
+
+    document.getElementById('tsp-cancel').addEventListener('click', () => {
+      popup.style.display = 'none';
+    });
+
+    document.getElementById('tsp-apply').addEventListener('click', () => {
+      const ctx = getContext();
+      if (!ctx || !ctx.scene || !_statusTokenId) return;
+      const token = ctx.scene.tokens.find(t => t.tokenId === _statusTokenId);
+      if (!token) return;
+
+      const cur      = parseInt(document.getElementById('tsp-hp-cur').value);
+      const max      = parseInt(document.getElementById('tsp-hp-max').value);
+      const cond     = document.getElementById('tsp-cond-text').value.trim();
+      const fontSize = parseInt(document.getElementById('tsp-cond-size').value) || 22;
+      token.hpCurrent        = isNaN(cur) ? null : cur;
+      token.hpMax            = isNaN(max) ? null : max;
+      token.conditionText    = cond || null;
+      token.conditionColor   = cond ? document.getElementById('tsp-cond-color').value : null;
+      token.conditionFontSize = cond ? fontSize : null;
+
+      ctx.renderer.updateTokenElement(token);
+      ctx.socket.emit('updateToken', {
+        sceneId:    token.sceneId,
+        tokenId:    _statusTokenId,
+        properties: { hpCurrent: token.hpCurrent, hpMax: token.hpMax, conditionText: token.conditionText, conditionColor: token.conditionColor, conditionFontSize: token.conditionFontSize },
+      });
+      popup.style.display = 'none';
+    });
+  }
+
+  function showStatusPopup(clientX, clientY, tokenId) {
+    const ctx = getContext();
+    if (!ctx || !ctx.scene) return;
+    const token = ctx.scene.tokens.find(t => t.tokenId === tokenId);
+    if (!token) return;
+    _statusTokenId = tokenId;
+
+    document.getElementById('tsp-hp-cur').value      = token.hpCurrent != null ? token.hpCurrent : '';
+    document.getElementById('tsp-hp-max').value      = token.hpMax     != null ? token.hpMax     : '';
+    document.getElementById('tsp-cond-text').value   = token.conditionText   || '';
+    document.getElementById('tsp-cond-size').value   = token.conditionFontSize || 22;
+    document.getElementById('tsp-cond-color').value  = token.conditionColor  || '#ffffff';
+
+    const popup = document.getElementById('token-status-popup');
+    popup.style.display = 'block';
+    const pw = popup.offsetWidth, ph = popup.offsetHeight;
+    popup.style.left = `${Math.min(clientX + 8, window.innerWidth  - pw - 8)}px`;
+    popup.style.top  = `${Math.min(clientY + 8, window.innerHeight - ph - 8)}px`;
   }
 })();

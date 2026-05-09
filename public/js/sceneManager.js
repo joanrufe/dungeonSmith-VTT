@@ -11,7 +11,9 @@ export class SceneManager {
     this.currentScene = null;
     this.selectedTokenId = null;
     this.selectedTokenIds = new Set();
-    this.sortableInitialized = false;
+    this.allScenes = [];
+    this.pinnedSceneIds = this._loadPinnedScenes();
+    this._dropdownSetup = false;
 
     this.init();
   }
@@ -89,58 +91,129 @@ export class SceneManager {
       });
   }
 
+  // ── Pin persistence ──────────────────────────────────────────
+  _loadPinnedScenes() {
+    try {
+      const d = localStorage.getItem('vtt-pinned-scenes');
+      return d ? JSON.parse(d) : [];
+    } catch { return []; }
+  }
+
+  _savePinnedScenes() {
+    try { localStorage.setItem('vtt-pinned-scenes', JSON.stringify(this.pinnedSceneIds)); } catch {}
+  }
+
+  pinScene(sceneId) {
+    if (this.pinnedSceneIds.includes(sceneId) || this.pinnedSceneIds.length >= 5) return;
+    this.pinnedSceneIds.push(sceneId);
+    this._savePinnedScenes();
+    this._renderPinnedButtons();
+    this._renderDropdownMenu();
+  }
+
+  unpinScene(sceneId) {
+    this.pinnedSceneIds = this.pinnedSceneIds.filter(id => id !== sceneId);
+    this._savePinnedScenes();
+    this._renderPinnedButtons();
+    this._renderDropdownMenu();
+  }
+
+  // ── Scene UI rendering ────────────────────────────────────────
   renderSceneButtons(scenes) {
-    const sceneButtonsContainer = document.getElementById('scene-buttons-container');
-    sceneButtonsContainer.innerHTML = ''; // Clear existing buttons
+    this.allScenes = scenes;
+    this._renderPinnedButtons();
+    this._renderDropdownMenu();
+    this._updateDropdownLabel();
+    this._setupDropdownToggle();
+  }
 
-    scenes.forEach((scene) => {
-      const button = document.createElement('button');
-      button.className = 'scene-button';
-      button.textContent = scene.sceneName;
-      button.dataset.sceneId = scene.sceneId;
-      button.addEventListener('click', () => this.onSceneButtonClick(scene));
+  _renderPinnedButtons() {
+    const container = document.getElementById('pinned-scenes-container');
+    if (!container) return;
+    container.innerHTML = '';
+    const pinnedScenes = this.pinnedSceneIds
+      .map(id => this.allScenes.find(s => s.sceneId === id))
+      .filter(Boolean);
+    pinnedScenes.forEach(scene => {
+      const btn = document.createElement('button');
+      btn.className = 'scene-button' + (this.currentScene?.sceneId === scene.sceneId ? ' active' : '');
+      btn.textContent = scene.sceneName;
+      btn.dataset.sceneId = scene.sceneId;
+      btn.title = scene.sceneName;
+      btn.addEventListener('click', () => this.onSceneButtonClick(scene));
+      container.appendChild(btn);
+    });
+  }
 
-      sceneButtonsContainer.appendChild(button);
+  _renderDropdownMenu() {
+    const menu = document.getElementById('scene-dropdown-menu');
+    if (!menu) return;
+    menu.innerHTML = '';
+    this.allScenes.forEach(scene => {
+      const isPinned = this.pinnedSceneIds.includes(scene.sceneId);
+      const isActive = this.currentScene?.sceneId === scene.sceneId;
+
+      const item = document.createElement('div');
+      item.className = 'scene-dd-item' + (isActive ? ' active' : '');
+      item.dataset.sceneId = scene.sceneId;
+
+      const namePart = document.createElement('span');
+      namePart.className = 'scene-dd-name';
+      namePart.textContent = scene.sceneName;
+      namePart.addEventListener('click', () => {
+        this.onSceneButtonClick(scene);
+        this._closeDropdown();
+      });
+
+      const pinBtn = document.createElement('button');
+      pinBtn.className = 'scene-dd-pin' + (isPinned ? ' pinned' : '');
+      pinBtn.title = isPinned
+        ? 'Unpin scene'
+        : (this.pinnedSceneIds.length >= 5 ? 'Max 5 pins reached' : 'Pin scene');
+      pinBtn.innerHTML = '<i class="fa-solid fa-thumbtack"></i>';
+      pinBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isPinned) this.unpinScene(scene.sceneId);
+        else this.pinScene(scene.sceneId);
+      });
+
+      item.appendChild(namePart);
+      item.appendChild(pinBtn);
+      menu.appendChild(item);
+    });
+  }
+
+  _updateDropdownLabel() {
+    const label = document.getElementById('scene-dropdown-label');
+    if (label) label.textContent = this.currentScene ? this.currentScene.sceneName : 'Scenes';
+  }
+
+  _setupDropdownToggle() {
+    if (this._dropdownSetup) return;
+    this._dropdownSetup = true;
+    const btn  = document.getElementById('scene-dropdown-btn');
+    const menu = document.getElementById('scene-dropdown-menu');
+    if (!btn || !menu) return;
+
+    // Toggle on button click
+    btn.addEventListener('click', () => {
+      menu.classList.toggle('hidden');
     });
 
-    // Update active scene button
-    if (this.currentScene) {
-      const activeButton = document.querySelector(`.scene-button[data-scene-id="${this.currentScene.sceneId}"]`);
-      if (activeButton) {
-        activeButton.classList.add('active');
+    // One permanent capture-phase listener — fires before any stopPropagation in child handlers.
+    // If the click lands outside the wrap AND the menu is open, close it.
+    document.addEventListener('click', (e) => {
+      if (menu.classList.contains('hidden')) return;
+      const wrap = document.getElementById('scene-dropdown-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        menu.classList.add('hidden');
       }
-    }
+    }, true);
+  }
 
-    // Initialize SortableJS on the scene-buttons-container
-    if (!this.sortableInitialized) {
-      this.sortable = new Sortable(sceneButtonsContainer, {
-        animation: 150,
-        onEnd: (evt) => {
-          // Get the new order of scene IDs
-          const sceneButtons = sceneButtonsContainer.querySelectorAll('.scene-button');
-          const newOrder = Array.from(sceneButtons).map(button => button.dataset.sceneId);
-
-          // Send the new order to the server
-          fetch('/updateSceneOrder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sceneOrder: newOrder }),
-          })
-            .then(response => response.json())
-            .then(data => {
-              if (!data.success) {
-                console.error('Failed to update scene order on server:', data.message);
-              } else {
-                console.log('Scene order updated successfully');
-              }
-            })
-            .catch(error => {
-              console.error('Error updating scene order:', error);
-            });
-        },
-      });
-      this.sortableInitialized = true;
-    }
+  _closeDropdown() {
+    const menu = document.getElementById('scene-dropdown-menu');
+    if (menu) menu.classList.add('hidden');
   }
 
   onSceneButtonClick(scene) {
@@ -148,20 +221,12 @@ export class SceneManager {
     window.VTT_FOLLOW_PLAYERS = followPlayers;
 
     if (followPlayers) {
-      // Notify the server to change the active scene for players.
       this.socket.emit('changeScene', { sceneId: scene.sceneId });
     }
 
-    // Load the selected scene
     this.loadScene(scene.sceneId);
-
-    // Update the active class on buttons
-    const buttons = document.querySelectorAll('.scene-button');
-    buttons.forEach((btn) => btn.classList.remove('active'));
-    const button = document.querySelector(`.scene-button[data-scene-id="${scene.sceneId}"]`);
-    if (button) {
-      button.classList.add('active');
-    }
+    this._renderPinnedButtons();
+    this._renderDropdownMenu();
   }
 
   loadScene(sceneId) {
@@ -172,14 +237,9 @@ export class SceneManager {
     this.currentScene = scene;
     this.clearSelection();
     this.renderScene(scene);
-
-    // Update active scene button
-    const buttons = document.querySelectorAll('.scene-button');
-    buttons.forEach((btn) => btn.classList.remove('active'));
-    const activeButton = document.querySelector(`.scene-button[data-scene-id="${scene.sceneId}"]`);
-    if (activeButton) {
-      activeButton.classList.add('active');
-    }
+    this._renderPinnedButtons();
+    this._renderDropdownMenu();
+    this._updateDropdownLabel();
   }
 
   renderScene(scene) {
@@ -229,9 +289,11 @@ export class SceneManager {
   }
 
   onSceneDblClick(event) {
-    if (event.target !== this.sceneContainer && event.target.id !== 'scene-bg-el' && event.target.id !== 'player-grid-canvas' && event.target.id !== 'paint-grid-canvas') {
-      return; // Only ping on the background, not UI or tokens
-    }
+    if (window.VTT_ACTIVE_NOTES_TOOL) return;
+    // Don't ping on sticky notes (they handle their own dblclick for editing)
+    if (event.target.closest('.sticky-note')) return;
+    // Don't ping on UI panels outside the scene
+    if (!this.sceneContainer.contains(event.target) && event.target !== this.sceneContainer) return;
 
     const rect = this.sceneContainer.getBoundingClientRect();
     const mouseX = event.clientX - rect.left;
@@ -275,6 +337,7 @@ export class SceneManager {
   onKeyDown(event) {
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (document.activeElement?.contentEditable === 'true') return;
     if (this.hasSelection() && event.key === ']') {
       this.forEachSelectedTokenId(tokenId => this.moveTokenZIndexUp(tokenId));
     } else if (this.hasSelection() && event.key === '[') {
@@ -508,6 +571,10 @@ export class SceneManager {
       if (element) {
         this.sceneContainer.removeChild(element);
       }
+      const hpBar = document.getElementById(`hpbar-${tokenId}`);
+      if (hpBar) hpBar.remove();
+      const condLabel = document.getElementById(`cond-${tokenId}`);
+      if (condLabel) condLabel.remove();
       // Notify server
       this.socket.emit('removeToken', {
         sceneId: this.currentScene.sceneId,
@@ -547,8 +614,7 @@ export class SceneManager {
     this.forEachSelectedTokenId((tokenId) => {
       const token = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
       if (!token) return;
-      token.rotation = ((token.rotation || 0) + delta) % 360;
-      if (token.rotation < 0) token.rotation += 360;
+      token.rotation = (token.rotation || 0) + delta;
       this.sceneRenderer.updateTokenElement(token);
       this.socket.emit('updateToken', {
         sceneId: this.currentScene.sceneId,
@@ -570,7 +636,7 @@ export class SceneManager {
           alert('Scene deleted successfully.');
           // Clear the current scene and tokens
           this.currentScene = null;
-          this.sceneContainer.innerHTML = '';
+          this._showNoSceneMsg();
           // Update the scene list
           this.fetchSceneList();
         } else {
@@ -613,6 +679,10 @@ export class SceneManager {
       if (element && element.parentNode === this.sceneContainer) {
         this.sceneContainer.removeChild(element);
       }
+      const hpBar = document.getElementById(`hpbar-${tokenId}`);
+      if (hpBar) hpBar.remove();
+      const condLabel = document.getElementById(`cond-${tokenId}`);
+      if (condLabel) condLabel.remove();
       // If the removed token was selected, unselect it
       if (this.selectedTokenId === tokenId) {
         this.selectedTokenIds.delete(tokenId);
@@ -623,13 +693,21 @@ export class SceneManager {
   }
 
   onSceneDeleted(sceneId) {
-    // If the current scene has been deleted, clear it from the UI
     if (this.currentScene && this.currentScene.sceneId === sceneId) {
       this.currentScene = null;
-      this.sceneContainer.innerHTML = '';
+      this._showNoSceneMsg();
     }
-    // Update the scene list
+    this.unpinScene(sceneId);
     this.fetchSceneList();
+  }
+
+  _showNoSceneMsg() {
+    this.sceneContainer.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.id = 'no-scene-msg';
+    msg.className = 'no-scene-msg';
+    msg.innerHTML = `<img src="./SceneSmith.png" class="no-scene-logo" alt="SceneSmith VTT"><div class="no-scene-label">Pick a Scene</div>`;
+    this.sceneContainer.appendChild(msg);
   }
 
   onDragOver(event) {

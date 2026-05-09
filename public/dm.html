@@ -3,31 +3,39 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>DND VTT – DM</title>
-  <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/css/dm.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <title>SceneSmith - DM</title>
+  <link rel="stylesheet" href="/css/styles.css?v=scenesmith-clean-1">
+  <link rel="stylesheet" href="/css/dm.css?v=scenesmith-clean-1">
+  <link rel="stylesheet" href="/css/theme.css?v=scenesmith-clean-1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/x-icon" href="./MiniVTT_Logo_DM.png">
+  <link rel="icon" type="image/png" href="./SceneSmith.png">
 </head>
 
 <body>
   <div id="toolbar">
     <!-- Create Scene -->
-    <button id="create-scene-button" style="background-color: rgba(200, 255, 200, 0.2); margin-right: 6px;"
-      onmouseover="this.style.backgroundColor='rgba(200, 255, 200, 0.3)'"
-      onmouseout="this.style.backgroundColor='rgba(200, 255, 200, 0.2)'">Create Scene</button>
+    <button id="create-scene-button" style="background-color: #151515; border: 1px solid rgba(255,255,255,0.16); color: white; border-radius: 0; margin-right: 6px;"
+      onmouseover="this.style.backgroundColor='rgba(255,122,24,0.22)';this.style.borderColor='#ff7a18'"
+      onmouseout="this.style.backgroundColor='#151515';this.style.borderColor='rgba(255,255,255,0.16)'">Create Scene</button>
 
     <!-- Duplicate Scene -->
-    <button id="duplicate-scene-button" style="background-color: rgba(200, 220, 255, 0.2); margin-right: 10px;" title="Duplicate current scene"
-      onmouseover="this.style.backgroundColor='rgba(200, 220, 255, 0.3)'"
-      onmouseout="this.style.backgroundColor='rgba(200, 220, 255, 0.2)'"><i class="fa-solid fa-copy"></i> Duplicate Scene</button>
+    <button id="duplicate-scene-button" style="background-color: #151515; border: 1px solid rgba(255,255,255,0.16); color: white; border-radius: 0; margin-right: 10px;" title="Duplicate current scene"
+      onmouseover="this.style.backgroundColor='rgba(255,122,24,0.22)';this.style.borderColor='#ff7a18'"
+      onmouseout="this.style.backgroundColor='#151515';this.style.borderColor='rgba(255,255,255,0.16)'"><i class="fa-solid fa-copy"></i> Duplicate Scene</button>
 
     <div style="height:20px;width:1px;background:#555;margin-right:10px;"></div>
 
-    <div id="scene-buttons-container"></div>
+    <!-- Dropdown + pinned scenes (pins appear to the RIGHT of dropdown) -->
+    <div id="scene-dropdown-wrap" style="position:relative;">
+      <button id="scene-dropdown-btn" class="toolbar-panel-btn" title="All scenes">
+        <i class="fa-solid fa-film" style="margin-right:4px;opacity:0.7;"></i><span id="scene-dropdown-label">Scenes</span>&nbsp;<i class="fa-solid fa-caret-down"></i>
+      </button>
+      <div id="scene-dropdown-menu" class="hidden"></div>
+    </div>
+    <div id="pinned-scenes-container" style="display:flex;align-items:center;gap:4px;"></div>
 
     <!-- Right-side toolbar controls -->
     <div id="toolbar-right">
@@ -98,6 +106,8 @@
   <div id="dm-tool-tray" class="tray-hidden">
     <button id="init-toggle-btn"  class="tray-btn" title="Initiative Tracker"><i class="fa-solid fa-khanda"></i><span>Init</span></button>
     <button id="paint-toggle-btn" class="tray-btn" title="Paint Tools"><i class="fa-solid fa-paintbrush"></i><span>Paint</span></button>
+    <button id="ae-toggle-btn"    class="tray-btn" title="Effects"><i class="fa-solid fa-bullseye"></i><span>Effects</span></button>
+    <button id="notes-toggle-btn" class="tray-btn" title="Sticky Notes"><i class="fa-solid fa-note-sticky"></i><span>Notes</span></button>
     <button id="dice-toggle-btn"  class="tray-btn" title="Dice Roller"><i class="fa-solid fa-dice-d20"></i><span>Dice</span></button>
     <button id="music-toggle-btn" class="tray-btn" title="Music Panel"><i class="fa-solid fa-music"></i><span>Music</span></button>
   </div>
@@ -154,16 +164,81 @@
     <!-- Brush size slider 1–5 -->
     <div class="paint-brush-row">
       <span>Brush</span>
-      <input type="range" id="paint-brush-slider" min="1" max="5" value="1" style="flex:1;accent-color:#5c8aff;">
+      <input type="range" id="paint-brush-slider" min="1" max="5" value="1" style="flex:1;accent-color:#ff7a18;">
       <span id="paint-brush-display">1</span>
     </div>
     <button id="paint-eraser-btn" style="width:100%;margin-top:6px;"><i class="fa-solid fa-eraser"></i> Eraser</button>
     <div class="custom-paint-row" style="display:flex;gap:5px;margin-top:6px;align-items:center;">
-      <button id="paint-custom-btn" style="flex:1;padding:5px;background:#3a3a50;border:1px solid #555;border-radius:4px;color:white;cursor:pointer;font-size:11px;"><i class="fa-solid fa-palette"></i> Custom</button>
+      <button id="paint-custom-btn" style="flex:1;padding:5px;background:#151515;border:1px solid rgba(255,255,255,0.16);border-radius:0;color:white;cursor:pointer;font-size:11px;"><i class="fa-solid fa-palette"></i> Custom</button>
       <input type="color" id="custom-paint-fill"    value="#9e9e9e" title="Fill Color"    style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
       <input type="color" id="custom-paint-outline" value="#cccccc" title="Outline Color" style="width:25px;height:25px;padding:0;border:none;cursor:pointer;">
     </div>
     <button id="paint-clear-btn" style="width:100%;margin-top:6px;"><i class="fa-solid fa-trash-can"></i> Clear All</button>
+  </div>
+
+  <!-- ═══ EFFECTS PANEL (floating pop-out) ═══ -->
+  <div id="area-effect-panel" class="draggable-panel panel-hidden">
+    <div class="panel-drag-handle">
+      <span><i class="fa-solid fa-bullseye"></i> Effects</span>
+      <span class="drag-hint">☰</span>
+    </div>
+
+    <!-- Shape selection (2×2 grid) -->
+    <div class="ae-shape-row">
+      <button class="ae-shape-btn ae-active" data-shape="square" title="Square / Cube">
+        <i class="fa-solid fa-square"></i> Square
+      </button>
+      <button class="ae-shape-btn" data-shape="circle" title="Sphere / Cylinder">
+        <i class="fa-solid fa-circle"></i> Circle
+      </button>
+      <button class="ae-shape-btn" data-shape="cone" title="Cone">
+        <i class="fa-solid fa-play"></i> Cone
+      </button>
+      <button class="ae-shape-btn" data-shape="line" title="Line / Beam">
+        <i class="fa-solid fa-minus"></i> Line
+      </button>
+    </div>
+
+    <!-- Size slider -->
+    <div class="ae-size-row">
+      <span>Size</span>
+      <input type="range" id="ae-size-input" min="5" max="100" step="5" value="30" style="flex:1;accent-color:var(--ss-orange);">
+      <span id="ae-size-display" style="font-size:11px;color:var(--ss-orange);font-weight:700;white-space:nowrap;">30ft</span>
+    </div>
+
+    <!-- Color presets grid -->
+    <div id="ae-presets" class="ae-presets"></div>
+
+    <!-- Custom color + breathing row -->
+    <div class="ae-bottom-row">
+      <div class="ae-color-row">
+        <span>Color</span>
+        <input type="color" id="ae-color-pick" value="#FF4500" title="Custom color">
+      </div>
+      <label class="ae-breathe-label" title="Animate the fill opacity in and out">
+        <input type="checkbox" id="ae-breathe-check">
+        <i class="fa-solid fa-wind"></i> Breathing
+      </label>
+    </div>
+
+    <!-- Mini preview -->
+    <div id="ae-preview" class="ae-preview"></div>
+
+    <!-- Place button -->
+    <button id="ae-spawn-btn" class="ae-spawn-btn">
+      <i class="fa-solid fa-plus"></i> Place Effect
+    </button>
+  </div>
+
+  <!-- ═══ NOTES PANEL (floating pop-out) ═══ -->
+  <div id="notes-panel" class="draggable-panel panel-hidden">
+    <div class="panel-drag-handle"><span><i class="fa-solid fa-note-sticky"></i> Sticky Notes</span><span class="drag-hint">☰</span></div>
+    <p class="sn-hint">Double-click the scene to place a note</p>
+    <div class="sn-colors">
+      <button class="sn-color-swatch active" data-color="yellow" style="background:#FFE57F;" title="Yellow"></button>
+      <button class="sn-color-swatch"        data-color="orange" style="background:#FFB347;" title="Orange"></button>
+      <button class="sn-color-swatch"        data-color="cyan"   style="background:#B2EBF2;" title="Cyan"></button>
+    </div>
   </div>
 
   <!-- ═══ DICE PANEL (floating pop-out) ═══ -->
@@ -185,9 +260,9 @@
     </div>
     <div class="dice-custom-row" style="display:flex;gap:4px;margin-top:8px;">
       <input type="text" id="dice-custom-input" placeholder="e.g. 2d6"
-        style="flex:1;background:#1a1a2a;border:1px solid #555;border-radius:4px;color:white;padding:4px;font-size:11px;">
+        style="flex:1;background:#151515;border:1px solid rgba(255,255,255,0.16);border-radius:0;color:white;padding:4px;font-size:11px;">
       <button id="dice-custom-roll-btn"
-        style="background:#5c8aff;border:none;border-radius:4px;color:white;padding:4px 8px;cursor:pointer;font-size:11px;">Roll</button>
+        style="background:#151515;border:1px solid #ff7a18;border-radius:0;color:white;padding:4px 8px;cursor:pointer;font-size:11px;">Roll</button>
     </div>
     <div class="dice-config-row">
       <label class="dice-config-item">
@@ -236,12 +311,9 @@
   </div>
 
   <div id="scene-container">
-    <div class="instructions">
-      <p>Create or select a scene, then drag and drop images here to add tokens to your scene.</p>
-      <p>- Delete token with [DEL]</p>
-      <p>- Toggle token to be interactable by players with [I]</p>
-      <p>- Toggle toolbar with [T]</p>
-      <p>- Delete Scene with [Shift+D]</p>
+    <div id="no-scene-msg" class="no-scene-msg">
+      <img src="./SceneSmith.png" class="no-scene-logo" alt="SceneSmith VTT">
+      <div class="no-scene-label">Pick a Scene</div>
     </div>
   </div>
 
@@ -252,18 +324,39 @@
     <h1 id="player-flourish-name"></h1>
   </div>
 
+  <!-- ═══ TOKEN STATUS POPUP ═══ -->
+  <div id="token-status-popup">
+    <div class="tsp-title"><i class="fa-solid fa-heart-pulse"></i> Token Status</div>
+    <div class="tsp-row">
+      <label>HP</label>
+      <input type="number" id="tsp-hp-cur" placeholder="—" min="0">
+      <span class="tsp-slash">/</span>
+      <input type="number" id="tsp-hp-max" placeholder="—" min="0">
+    </div>
+    <div class="tsp-row">
+      <label>Text</label>
+      <input type="text" id="tsp-cond-text" placeholder="e.g. Poisoned">
+      <input type="number" id="tsp-cond-size" value="22" min="6" max="72" style="width:42px">
+      <input type="color" id="tsp-cond-color" value="#ffffff">
+    </div>
+    <div class="tsp-btns">
+      <button id="tsp-apply">Apply</button>
+      <button id="tsp-cancel">Cancel</button>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/gridRenderer.js"></script>
   <script type="module" src="/js/dm.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
-
   <script src="/js/tokenTool.js"></script>
   <script src="/js/calloutConfig.js"></script>
   <script src="/js/dmControls.js"></script>
   <script src="/js/rulerTool.js"></script>
   <script src="/js/initiativeTracker.js"></script>
   <script src="/js/paintMode.js"></script>
+  <script src="/js/stickyNotes.js"></script>
+  <script src="/js/areaEffects.js"></script>
   <script type="module" src="/js/diceRoller.js"></script>
 </body>
 

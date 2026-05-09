@@ -1,6 +1,6 @@
 // socketHandler.js
 
-const Scene = require('./models/sceneModel'); // Make sure this path is correct
+const Scene = require('./models/sceneModel');
 
 // ── Server-side dice roller ───────────────────────────────────────────────────
 // Parses "2d6", "1d20", "2d6+3" etc. Returns:
@@ -37,6 +37,7 @@ module.exports = (io) => {
 
     // Send the active scene ID to the client upon connection
     socket.emit('activeSceneId', Scene.activeSceneId);
+
 
     // Send persisted bg color and grid state to newly connected client
     if (io._bgColor) socket.emit('setBgColor', { color: io._bgColor });

@@ -345,9 +345,10 @@ socket.on('toggleGrid', ({ visible, gridSize, gridType }) => {
 
 // ─── Double Click Ping (Player Side) ──────────────────────────────────────
 sceneContainer.addEventListener('dblclick', (event) => {
-  if (event.target !== sceneContainer && event.target.id !== 'scene-bg-el' && event.target.id !== 'player-grid-canvas') {
-    return; // Only ping on the background
-  }
+  // Don't ping on sticky notes (they handle their own dblclick for editing)
+  if (event.target.closest('.sticky-note')) return;
+  // Don't ping on UI elements outside the scene
+  if (!sceneContainer.contains(event.target) && event.target !== sceneContainer) return;
 
   const rect = sceneContainer.getBoundingClientRect();
   const mouseX = event.clientX - rect.left;

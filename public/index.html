@@ -3,22 +3,23 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>DND VTT – Player</title>
-  <link rel="icon" type="image/x-icon" href="./MiniVTT_Logo_Player.png">
+  <title>SceneSmith - Player</title>
+  <link rel="icon" type="image/png" href="./SceneSmith.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <audio id="background-music" style="display: none;"></audio>
-  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/styles.css?v=scenesmith-clean-1">
+  <link rel="stylesheet" href="/css/theme.css?v=scenesmith-clean-1">
 </head>
 
 <body>
   <!-- Audio Enable Overlay -->
   <div id="audio-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(30,30,30,0.85); display: flex; justify-content: center; align-items: center; z-index: 1000;">
-    <button id="enable-audio-button" style="padding: 20px 40px; font-size: 18px; background-color: #007bff; color: #fff; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center;">
+    <button id="enable-audio-button" style="padding: 20px 40px; font-size: 18px; background-color: #151515; color: #fff; border: 1px solid #ff7a18; border-radius: 0; cursor: pointer; display: flex; align-items: center;">
       <span style="font-size: 24px; margin-right: 10px;">🔊</span>
       Click to Enable Audio
     </button>
@@ -50,7 +51,12 @@
     </div>
   </div>
 
-  <div id="scene-container"></div>
+  <div id="scene-container">
+    <div id="no-scene-msg" class="no-scene-msg">
+      <img src="./SceneSmith.png" class="no-scene-logo" alt="SceneSmith VTT">
+      <div class="no-scene-label">Please Wait</div>
+    </div>
+  </div>
 
   <!-- Collapsible initiative sidebar -->
   <div id="player-init-wrapper">
@@ -58,11 +64,86 @@
     <button id="player-init-collapse-btn" title="Collapse/expand initiative">&#x276E;</button>
   </div>
 
+  <!-- Effects Toggle Button -->
+  <button id="player-effects-toggle-btn" title="Toggle Area Effects"
+    style="position:fixed; top:10px; right:270px; z-index:1002;
+           background:#151515; border:1px solid rgba(255,255,255,0.16);
+           color:white; padding:6px 10px; border-radius:0; cursor:pointer; font-size:13px;">
+    <i class="fa-solid fa-bullseye"></i> Effects
+  </button>
+
+  <!-- Player-only Effects Panel -->
+  <div id="player-area-effect-panel" class="draggable-panel panel-hidden" style="top:50px;right:270px;width:230px;">
+    <div class="panel-drag-handle">
+      <span><i class="fa-solid fa-bullseye"></i> Effects</span>
+      <span class="drag-hint">☰</span>
+    </div>
+
+    <div class="ae-shape-row">
+      <button class="ae-shape-btn ae-active" data-shape="square" title="Square / Cube">
+        <i class="fa-solid fa-square"></i> Square
+      </button>
+      <button class="ae-shape-btn" data-shape="circle" title="Sphere / Cylinder">
+        <i class="fa-solid fa-circle"></i> Circle
+      </button>
+      <button class="ae-shape-btn" data-shape="cone" title="Cone">
+        <i class="fa-solid fa-play"></i> Cone
+      </button>
+      <button class="ae-shape-btn" data-shape="line" title="Line / Beam">
+        <i class="fa-solid fa-minus"></i> Line
+      </button>
+    </div>
+
+    <div class="ae-size-row">
+      <span>Size</span>
+      <input type="range" id="ae-size-input" min="5" max="100" step="5" value="30" style="flex:1;accent-color:var(--ss-orange);">
+      <span id="ae-size-display" style="font-size:11px;color:var(--ss-orange);font-weight:700;white-space:nowrap;">30ft</span>
+    </div>
+
+    <div id="ae-presets" class="ae-presets"></div>
+
+    <div class="ae-bottom-row">
+      <div class="ae-color-row">
+        <span>Color</span>
+        <input type="color" id="ae-color-pick" value="#FF4500" title="Custom color">
+      </div>
+      <label class="ae-breathe-label" title="Animate the fill opacity in and out">
+        <input type="checkbox" id="ae-breathe-check">
+        <i class="fa-solid fa-wind"></i> Breathing
+      </label>
+    </div>
+
+    <div id="ae-preview" class="ae-preview"></div>
+
+    <button id="ae-spawn-btn" class="ae-spawn-btn">
+      <i class="fa-solid fa-plus"></i> Place Effect
+    </button>
+  </div>
+
+  <!-- Notes Toggle Button -->
+  <button id="player-notes-toggle-btn" title="Toggle Sticky Notes"
+    style="position:fixed; top:10px; right:185px; z-index:1002;
+           background:#151515; border:1px solid rgba(255,255,255,0.16);
+           color:white; padding:6px 10px; border-radius:0; cursor:pointer; font-size:13px;">
+    <i class="fa-solid fa-note-sticky"></i> Notes
+  </button>
+
+  <!-- Player Notes Panel -->
+  <div id="player-notes-panel" class="draggable-panel panel-hidden" style="top:50px;right:170px;width:210px;">
+    <div class="panel-drag-handle"><span><i class="fa-solid fa-note-sticky"></i> My Notes</span><span class="drag-hint">☰</span></div>
+    <p class="sn-hint">Double-click the scene to place a note</p>
+    <div class="sn-colors">
+      <button class="sn-player-swatch active" data-color="yellow" style="background:#FFE57F;" title="Yellow"></button>
+      <button class="sn-player-swatch"        data-color="orange" style="background:#FFB347;" title="Orange"></button>
+      <button class="sn-player-swatch"        data-color="cyan"   style="background:#B2EBF2;" title="Cyan"></button>
+    </div>
+  </div>
+
   <!-- Dice Roller Toggle Button -->
   <button id="dice-toggle-btn" title="Toggle Dice Roller"
     style="position:fixed; top:10px; right:50px; z-index:1001;
-           background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
-           color:white; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:13px;">
+           background:#151515; border:1px solid rgba(255,255,255,0.16);
+           color:white; padding:6px 10px; border-radius:0; cursor:pointer; font-size:13px;">
     <i class="fa-solid fa-dice-d20"></i> Dice
   </button>
 
@@ -85,9 +166,9 @@
     </div>
     <div class="dice-custom-row" style="display:flex;gap:4px;margin-top:8px;">
       <input type="text" id="dice-custom-input" placeholder="e.g. 2d6"
-        style="flex:1;background:#1a1a2a;border:1px solid #555;border-radius:4px;color:white;padding:4px;font-size:11px;">
+        style="flex:1;background:#151515;border:1px solid rgba(255,255,255,0.16);border-radius:0;color:white;padding:4px;font-size:11px;">
       <button id="dice-custom-roll-btn"
-        style="background:#5c8aff;border:none;border-radius:4px;color:white;padding:4px 8px;cursor:pointer;font-size:11px;">Roll</button>
+        style="background:#151515;border:1px solid #ff7a18;border-radius:0;color:white;padding:4px 8px;cursor:pointer;font-size:11px;">Roll</button>
     </div>
     <div class="dice-config-row">
       <label class="dice-config-item">
@@ -148,6 +229,8 @@
   <script src="/js/tokenTool.js"></script>
   <script src="/js/rulerTool.js"></script>
   <script src="/js/playerControls.js"></script>
+  <script src="/js/playerEffects.js"></script>
+  <script src="/js/stickyNotesPlayer.js"></script>
   <script type="module" src="/js/diceRoller.js"></script>
 </body>
 

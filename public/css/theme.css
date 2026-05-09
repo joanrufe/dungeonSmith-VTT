@@ -1,0 +1,141 @@
+/* SceneSmith VTT theme overrides loaded last. */
+:root {
+  --ss-bg: #080808;
+  --ss-panel: rgba(15,15,15,0.94);
+  --ss-panel-solid: #151515;
+  --ss-border: rgba(255,255,255,0.16);
+  --ss-text: #f1f1f1;
+  --ss-muted: rgba(255,255,255,0.62);
+  --ss-orange: #ff7a18;
+  --ss-orange-soft: rgba(255,122,24,0.22);
+  --ss-red: #c62828;
+}
+
+body {
+  background: var(--ss-bg) !important;
+  color: var(--ss-text) !important;
+}
+
+button,
+input,
+select,
+textarea,
+.draggable-panel,
+.toolbar-panel-btn,
+.grid-adj-btn,
+.scene-button,
+.tray-btn,
+.dice-btn,
+.dice-config-item select,
+.dice-config-item input[type="color"],
+.player-help-content,
+#player-help-btn,
+.player-ruler-btn,
+#player-init-sidebar,
+#player-init-collapse-btn,
+#dm-tool-tray,
+#toolbar,
+.help-content,
+#music-drop-area,
+.init-row,
+.init-input-row input,
+.init-input-row button,
+.init-action-row button,
+.paint-grid-row button,
+#paint-clear-btn,
+#paint-eraser-btn,
+#paint-custom-btn,
+.init-announce-btn {
+  border-radius: 0 !important;
+}
+
+#toolbar,
+#dm-tool-tray,
+.draggable-panel,
+.player-help-content,
+.help-content,
+#player-init-sidebar {
+  background: var(--ss-panel) !important;
+  border-color: var(--ss-border) !important;
+}
+
+.toolbar-panel-btn,
+.grid-adj-btn,
+.scene-button,
+.tray-btn,
+.dice-btn,
+.dice-config-item select,
+.dice-config-item input[type="color"],
+#player-help-btn,
+.player-ruler-btn,
+#dice-toggle-btn,
+.init-input-row input,
+.init-input-row button,
+.init-action-row button,
+.paint-grid-row button,
+#paint-clear-btn,
+#paint-eraser-btn,
+#paint-custom-btn,
+.init-announce-btn {
+  background: var(--ss-panel-solid) !important;
+  border-color: var(--ss-border) !important;
+  color: var(--ss-text) !important;
+}
+
+.toolbar-panel-btn:hover,
+.grid-adj-btn:hover,
+.scene-button:hover,
+.tray-btn:hover,
+.dice-btn:hover,
+#player-help-btn:hover,
+.player-ruler-btn:hover,
+#dice-toggle-btn:hover,
+.init-input-row button:hover,
+.init-action-row button:hover,
+.paint-grid-row button:hover,
+#paint-clear-btn:hover,
+#paint-eraser-btn:hover,
+#paint-custom-btn:hover,
+.init-announce-btn:hover {
+  background: var(--ss-orange-soft) !important;
+  border-color: var(--ss-orange) !important;
+  color: #fff !important;
+}
+
+.toolbar-panel-btn.active-tool-btn,
+.tray-btn.active-tool-btn,
+.player-ruler-btn.active-tool-btn,
+.init-row.init-active,
+.dice-clear-btn,
+.dice-clear-btn:hover {
+  background: var(--ss-red) !important;
+  border-color: var(--ss-red) !important;
+  color: #fff !important;
+}
+
+.panel-drag-handle,
+.dice-title,
+.pisb-title,
+.player-help-content h2,
+#initiative-panel h3,
+#music-panel h3,
+.init-round-display,
+#ruler-mode-indicator {
+  color: var(--ss-orange) !important;
+}
+
+#ruler-mode-indicator {
+  background: var(--ss-panel-solid) !important;
+  border-color: var(--ss-orange) !important;
+  border-radius: 0 !important;
+}
+
+#dice-result-log {
+  color: var(--ss-orange) !important;
+}
+
+#music-drop-area:hover,
+#music-drop-area.dragover {
+  background: var(--ss-orange-soft) !important;
+  border-color: var(--ss-orange) !important;
+}

@@ -122,12 +122,15 @@
     // ── Panel pop-out toggles from tray ───────────────────
     setupPanelToggle('init-toggle-btn',  'initiative-panel');
     setupPanelToggle('paint-toggle-btn', 'paint-panel');
+    setupPanelToggle('ae-toggle-btn',    'area-effect-panel');
     setupPanelToggle('dice-toggle-btn',  'dice-panel');
     setupPanelToggle('music-toggle-btn', 'music-panel');
 
     // ── Make panels draggable ─────────────────────────────
     makeDraggable(document.getElementById('initiative-panel'));
     makeDraggable(document.getElementById('paint-panel'));
+    makeDraggable(document.getElementById('area-effect-panel'));
+    makeDraggable(document.getElementById('notes-panel'));
     makeDraggable(document.getElementById('music-panel'));
     makeDraggable(document.getElementById('dice-panel'));
   });

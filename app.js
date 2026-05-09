@@ -7,12 +7,10 @@ const app = express();
 const session = require('express-session');
 const crypto = require('crypto');
 
-// Generate a secure random secret
 function generateSecret(length = 64) {
   return crypto.randomBytes(length).toString('hex');
 }
 
-// Use an environment variable or generate a new secret
 const sessionSecret = process.env.SESSION_SECRET || generateSecret();
 
 // Session setup
@@ -31,7 +29,14 @@ app.use((req, res, next) => {
   if (req.path === '/files.html') return res.redirect('/files');
   next();
 });
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  index: false,
+  setHeaders(res, filePath) {
+    if (/\.(html|css|js)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+  },
+}));
 
 // Routes
 const routes = require('./routes');

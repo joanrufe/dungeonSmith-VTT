@@ -2,7 +2,7 @@
 
 A heavily expanded fork of [MiniVTT](https://github.com/SamsterJam/MiniVTT) for running lightweight tabletop RPG sessions with a faster DM workflow, richer scene tools, and real-time player sync.
 
-SceneSmith VTT keeps the original "everything is a token" simplicity while adding a larger DM toolset: media organization, paint tools, initiative announcements, 3D dice, ruler mode, player-facing sync, music controls, and quality-of-life updates for running sessions quickly.
+SceneSmith VTT keeps the original "everything is a token" simplicity while adding a larger DM toolset: media organization, paint tools, initiative announcements, 3D dice, ruler mode, player-facing sync, music controls, sticky notes, and quality-of-life updates for running sessions quickly.
 
 Original project:  
 https://github.com/SamsterJam/MiniVTT
@@ -35,35 +35,41 @@ These are the core ideas and baseline capabilities inherited from MiniVTT:
 
 These are the major additions and expansions in this fork:
 
-**Expanded DM toolbar and floating panels** - DM tools live in draggable panels with a right-side tray for Initiative, Paint, Dice, and Music.
+**Expanded DM toolbar and floating panels** - DM tools live in draggable panels with a right-side tray for Initiative, Paint, Effects, Dice, Music, and Notes.
 
 **Media Library** - Organize reusable media in folders from `/files`. Upload images, videos, PDFs, and text documents. Images preview as thumbnails; videos/documents show file icons. Shift-click downloads files, and double-clicking images/videos adds them to the active scene.
 
 **Main-area media drag upload** - Drop files directly into the media library grid area, not only the sidebar drop zone.
 
-**Password management tab** - Change DM and player passwords from the Media Library password tab or by editing `secret.txt`.
+**Password management tab** - Change DM and player passwords from the Media Library password tab or by editing `data/private/secrets.txt`.
 
 **Improved token controls** - Duplicate, rotate, fine-rotate, change layer order, multi-select, and improved token drag behavior.
 
 **Grid upgrades** - Square/hex grid toggle, adjustable grid size, player grid sync, show/hide controls, and snap-to-grid.
 
-**Cached grid rendering** - Square and hex grid drawing uses cached pattern tiles for faster redraws.
-
-**Ruler mode** - Toggleable ruler mode with a visible active indicator. It works over tokens without selecting or dragging them.
+**Ruler mode** - Toggleable ruler mode with a visible active indicator. It works over tokens without selecting or dragging them. Measures distance at 5 ft per grid cell.
 
 **Paint system** - Paint terrain tiles directly onto the scene with adjustable brush size, custom colors, eraser, and layer controls.
 
-**Initiative tracker** - Track turn order, edit names/values inline, advance rounds, and announce active turns with readable center-screen callouts.
+**Initiative tracker** - Track turn order, edit names/values inline, advance rounds, and announce active turns with readable center-screen callouts visible to all players.
 
-**3D dice roller** - Roll common dice or custom expressions with shared results, color themes, silent roll mode, callout results, and auto-clear.
+**3D dice roller** - Roll common dice or custom expressions with shared results, color themes, silent roll mode, callout results, and auto-clear. Available to both DM and players.
 
 **Snap View** - DM can push their current camera position and zoom to connected players.
 
-**Player-side controls** - Player help modal, initiative sidebar, ruler, dice panel, and independent pan/zoom behavior.
+**Scene ping** - Double-click the scene to place a temporary blue ping indicator visible to all connected clients. Works on the background and on tokens.
 
-**Build and run scripts** - Windows batch files for validation/setup and starting the server.
+**DM sticky notes** - Private draggable notes pinned to the scene in world space. Pan and zoom with the scene. Three color options (yellow, orange, cyan). Persistent across sessions. Only visible to the DM. Double-click to edit, drag to reposition, resize from the bottom-right corner. Keyboard shortcuts are disabled while typing in a note.
 
-**Git hygiene for local data** - Runtime media, uploads, music, scene data, secrets, and local tooling folders are ignored.
+**Player sticky notes** - Players have their own private draggable notes that work the same way. Stored in browser localStorage; never sent to the server. Toggle from the player toolbar.
+
+**Player-side controls** - Player help modal, collapsible initiative sidebar, ruler, dice panel, sticky notes panel, and independent pan/zoom behavior.
+
+**Scene dropdown and pinned scenes** - Scenes are accessed through a dropdown menu rather than a horizontal scrollbar. Pin up to 5 frequently used scenes to the toolbar for one-click access. Pins are persisted in localStorage and can be toggled from inside the dropdown.
+
+**Empty state screens** - When no scene is loaded the DM sees the SceneSmith logo and "Pick a Scene". Players see the logo and "Please Wait" until the DM loads a scene.
+
+**Effects tool** - Spawn transparent area-effect overlays directly on the canvas as standard tokens. Choose from Square, Circle, Cone, or Line shapes. Twelve quick-select damage-type colors (Fire, Ice, Lightning, Acid, Poison, Thunder, Necrotic, Radiant, Force, Psychic, Fog, Darkness) plus a custom color picker. Size slider runs from 5 ft to 100 ft in 5 ft steps. Enable Breathing to animate the fill opacity in a slow pulse using SVG SMIL animation. Effects spawn centered on the viewport at a z-index above all other tokens and can be moved, scaled, and rotated like any token.
 
 ---
 
@@ -100,6 +106,8 @@ Or double-click:
 Run_DND_VTT.bat
 ```
 
+The run script asks which port to use. Press Enter for `3000`.
+
 Default URLs:
 
 - Player view: `http://localhost:3000`
@@ -110,13 +118,27 @@ Default URLs:
 
 ## Usage
 
+### Quick Role Summary
+
+**DMs can:**
+- Create and manage scenes, tokens, maps, media, and music
+- Control visibility, movement permissions, grid, snap view, and initiative
+- Use paint, ruler, effects, dice, pings, and private sticky notes
+- Organize uploads and change DM/player passwords from the media library
+
+**Players can:**
+- View the active scene, visible tokens, grid, music, initiative, and callouts
+- Move allowed tokens, pan/zoom, ping the scene, and use ruler mode
+- Roll dice, place private sticky notes, and use private local effects
+- Collapse initiative and use the player help controls
+
 ### DM View
 
-Open `/dm` to manage scenes, tokens, music, initiative, dice, paint tools, grid controls, and player view syncing.
+Open `/dm` to manage scenes, tokens, music, initiative, dice, paint tools, area effects, sticky notes, grid controls, and player view syncing. Scenes are selected from the dropdown in the toolbar; pin frequently used scenes for quick access.
 
 ### Player View
 
-Players open `/` and see the active scene, visible tokens, initiative callouts, dice rolls, music, and pings.
+Players open `/` and see the active scene, visible tokens, initiative callouts, dice rolls, music, pings, and their own private sticky notes. A "Please Wait" screen is shown until the DM loads a scene.
 
 ### Media Library
 
@@ -134,11 +156,28 @@ Open `/files` to upload and organize files.
 - `I` - Toggle whether players can move selected token
 - `[` / `]` - Move selected token down/up in layer order
 - `Ctrl+D` - Duplicate selected token
+- `Ctrl+Click` - Add token to selection (group select)
 - `Q` / `E` - Rotate selected token
 - `Shift+Q` / `Shift+E` - Fine rotate selected token
 - `T` - Toggle DM toolbar
 - `Shift+D` - Delete current scene
-- `Double-click` canvas - Ping location
+- `Double-click` canvas or token - Ping location
+
+> Keyboard shortcuts are automatically disabled while typing in a sticky note.
+
+### Sticky Notes
+
+**DM notes** are accessible from the Notes button in the DM tool tray. They are pinned to world space (pan and zoom with the scene), persist to disk, and are never visible to players.
+
+**Player notes** are accessible from the Notes button in the player toolbar. They are stored in browser localStorage and are completely private.
+
+For both:
+- Enable the tool, then double-click empty scene area to place a note
+- Drag to reposition at any time
+- Resize from the bottom-right corner handle
+- Double-click note text to enter edit mode; click elsewhere to save
+- `Escape` exits edit mode or closes the notes panel
+- Choose a color (yellow, orange, cyan) from the Notes panel
 
 ---
 
@@ -158,6 +197,8 @@ Open `/files` to upload and organize files.
 ├── public/
 │   ├── css/
 │   ├── js/
+│   ├── lib/
+│   │   └── dice-box-threejs/
 │   ├── dm.html
 │   ├── index.html
 │   ├── files.html
@@ -166,7 +207,7 @@ Open `/files` to upload and organize files.
 │   └── uploads/
 ├── Build_DND_VTT.bat
 ├── Run_DND_VTT.bat
-└── secret.txt
+└── data/private/secrets.txt
 ```
 
 Runtime/user data folders are ignored by git:
@@ -175,7 +216,7 @@ Runtime/user data folders are ignored by git:
 - `public/music/`
 - `public/uploads/`
 - `data/scenes/`
-- `secret.txt`
+- `data/private/`
 
 ---
 
@@ -185,10 +226,9 @@ Runtime/user data folders are ignored by git:
 - Express
 - Socket.IO
 - Interact.js
-- SortableJS
 - Multer
 - Font Awesome
-- 3D Dice / Dice Box
+- Dice Box (Three.js renderer)
 
 ---
 

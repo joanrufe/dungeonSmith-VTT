@@ -26,6 +26,7 @@
   let gridType   = 'square';
   let gridCanvas = null;
   let brushSize  = 1; // 1–5 cells (center-based)
+  let previewEl  = null;
 
   // Track col-row → tokenId so we can erase
   const tileMap = {}; // key: "col,row" → tokenId
@@ -190,6 +191,7 @@
     });
 
     buildGrid();
+    buildPreview();
     bindMouseEvents();
   });
 
@@ -216,6 +218,67 @@
     window.VTT_ACTIVE_PAINT_TOOL = null;
     const sc = document.getElementById('scene-container');
     if (sc) sc.style.cursor = '';
+    hidePreview();
+  }
+
+  // ── Paint preview overlay ────────────────────────────────
+  function buildPreview() {
+    previewEl = document.createElement('div');
+    previewEl.id = 'paint-preview-overlay';
+    previewEl.style.cssText = 'position:absolute;pointer-events:none;z-index:99;display:none;box-sizing:border-box;';
+    const sc = document.getElementById('scene-container');
+    if (sc) sc.appendChild(previewEl);
+  }
+
+  function updatePreview(e, sc) {
+    if (previewEl && !previewEl.parentNode) sc.appendChild(previewEl);
+    if (!previewEl || !activeTool) { hidePreview(); return; }
+
+    const rect     = sc.getBoundingClientRect();
+    const renderer = window.VTT_DM && window.VTT_DM.sceneManager && window.VTT_DM.sceneManager.sceneRenderer;
+    const scale    = renderer ? renderer.scale   : 1;
+    const offsetX  = renderer ? renderer.offsetX : 0;
+    const offsetY  = renderer ? renderer.offsetY : 0;
+
+    const mx  = (e.clientX - rect.left) / scale - offsetX;
+    const my  = (e.clientY - rect.top)  / scale - offsetY;
+    const col = Math.floor(mx / gridSize - (brushSize - 1) / 2);
+    const row = Math.floor(my / gridSize - (brushSize - 1) / 2);
+
+    const left   = (col * gridSize + offsetX) * scale;
+    const top    = (row * gridSize + offsetY) * scale;
+    const w      = brushSize * gridSize * scale;
+    const h      = brushSize * gridSize * scale;
+    const cellPx = gridSize * scale;
+
+    let borderClr, bgClr;
+    if (activeTool === 'eraser') {
+      borderClr = '#ff4444';
+      bgClr     = 'rgba(255,68,68,0.15)';
+    } else {
+      const cfg = activeTool === 'custom' ? null : TOOLS[activeTool];
+      borderClr = '#ffffff';
+      bgClr     = cfg ? `${cfg.bg}44` : 'rgba(255,255,255,0.15)';
+    }
+
+    previewEl.style.left   = `${left}px`;
+    previewEl.style.top    = `${top}px`;
+    previewEl.style.width  = `${w}px`;
+    previewEl.style.height = `${h}px`;
+    previewEl.style.border = `2px solid ${borderClr}`;
+    previewEl.style.boxShadow = `0 0 0 1px rgba(0,0,0,0.5)`;
+    if (brushSize > 1) {
+      previewEl.style.background = `linear-gradient(to right,${borderClr}55 1px,transparent 1px),linear-gradient(to bottom,${borderClr}55 1px,transparent 1px),${bgClr}`;
+      previewEl.style.backgroundSize = `${cellPx}px ${cellPx}px,${cellPx}px ${cellPx}px,auto`;
+    } else {
+      previewEl.style.background     = bgClr;
+      previewEl.style.backgroundSize = '';
+    }
+    previewEl.style.display = '';
+  }
+
+  function hidePreview() {
+    if (previewEl) previewEl.style.display = 'none';
   }
 
   // ── Grid overlay ─────────────────────────────────────────
@@ -235,8 +298,11 @@
     if (!gridCanvas) return;
     const renderer = window.VTT_DM && window.VTT_DM.sceneManager && window.VTT_DM.sceneManager.sceneRenderer;
     if (renderer) {
+      const spacing = gridSize * renderer.scale;
+      const phaseX  = ((renderer.offsetX * renderer.scale) % spacing + spacing) % spacing;
+      const phaseY  = ((renderer.offsetY * renderer.scale) % spacing + spacing) % spacing;
       gridCanvas.style.transformOrigin = '0 0';
-      gridCanvas.style.transform = `translate(${renderer.offsetX * renderer.scale}px, ${renderer.offsetY * renderer.scale}px) scale(${renderer.scale})`;
+      gridCanvas.style.transform = `translate(${phaseX}px, ${phaseY}px) scale(${renderer.scale})`;
     }
   }
 
@@ -275,10 +341,12 @@
         handlePaint(e, sc);
       });
       sc.addEventListener('mousemove', e => {
-        if (window.VTT_ACTIVE_RULER_TOOL) return;
+        if (window.VTT_ACTIVE_RULER_TOOL) { hidePreview(); return; }
+        updatePreview(e, sc);
         if (!isDrawing || !activeTool) return;
         handlePaint(e, sc);
       });
+      sc.addEventListener('mouseleave', hidePreview);
       window.addEventListener('mouseup', () => { isDrawing = false; });
     }
     tryBind();
@@ -292,12 +360,10 @@
     const offsetX  = renderer ? renderer.offsetX : 0;
     const offsetY  = renderer ? renderer.offsetY : 0;
 
-    const mx  = (e.clientX - rect.left) / scale - offsetX;
-    const my  = (e.clientY - rect.top)  / scale - offsetY;
-    // Center the brush on the cursor cell
-    const half      = Math.floor(brushSize / 2);
-    const originCol = Math.floor(mx / gridSize) - half;
-    const originRow = Math.floor(my / gridSize) - half;
+    const mx        = (e.clientX - rect.left) / scale - offsetX;
+    const my        = (e.clientY - rect.top)  / scale - offsetY;
+    const originCol = Math.floor(mx / gridSize - (brushSize - 1) / 2);
+    const originRow = Math.floor(my / gridSize - (brushSize - 1) / 2);
 
     if (activeTool === 'eraser') {
       for (let dc = 0; dc < brushSize; dc++) {

@@ -3,6 +3,7 @@ node_modules/
 
 # Local secrets
 secret.txt
+data/private/**
 
 # Local AI/tooling state
 .claude/

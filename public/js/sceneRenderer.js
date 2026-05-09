@@ -76,6 +76,56 @@ export class SceneRenderer {
     this.container.style.backgroundColor = '';
   }
 
+  _syncHpBar(token) {
+    if (token.isPaintTile) return;
+    const BAR_H = 6, GAP = 3;
+    let bar = document.getElementById(`hpbar-${token.tokenId}`);
+    const hasHp = token.hpMax > 0 && token.hpCurrent != null;
+    if (!hasHp || (!this.isDM && token.hidden)) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = `hpbar-${token.tokenId}`;
+      bar.className = 'token-hp-bar';
+      bar.appendChild(document.createElement('div')).className = 'token-hp-bar-fill';
+      this.container.appendChild(bar);
+    }
+    const pct   = Math.max(0, Math.min(1, token.hpCurrent / token.hpMax));
+    const color = pct > 0.5 ? '#4caf50' : pct > 0.25 ? '#ff9800' : '#f44336';
+    bar.style.left    = `${(token.x + this.offsetX) * this.scale}px`;
+    bar.style.top     = `${(token.y + this.offsetY) * this.scale - BAR_H - GAP}px`;
+    bar.style.width   = `${token.width * this.scale}px`;
+    bar.style.height  = `${BAR_H}px`;
+    bar.style.opacity = (this.isDM && token.hidden) ? '0.5' : '1';
+    bar.querySelector('.token-hp-bar-fill').style.width      = `${pct * 100}%`;
+    bar.querySelector('.token-hp-bar-fill').style.background = color;
+  }
+
+  _syncConditionLabel(token) {
+    if (token.isPaintTile) return;
+    const BAR_H = 6, BAR_GAP = 3, LABEL_GAP = 2;
+    let label = document.getElementById(`cond-${token.tokenId}`);
+    const hasText = token.conditionText && token.conditionText.trim();
+    if (!hasText || (!this.isDM && token.hidden)) { if (label) label.remove(); return; }
+    if (!label) {
+      label = document.createElement('div');
+      label.id = `cond-${token.tokenId}`;
+      label.className = 'token-condition-label';
+      this.container.appendChild(label);
+    }
+    const baseFontSize  = token.conditionFontSize || 22;
+    const scaledFont    = Math.max(9, Math.round(baseFontSize * this.scale));
+    const labelH        = scaledFont + 2;
+    const totalOffset   = BAR_H + BAR_GAP + labelH + LABEL_GAP;
+    label.textContent        = token.conditionText;
+    label.style.color        = token.conditionColor || '#ffffff';
+    label.style.fontSize     = `${scaledFont}px`;
+    label.style.lineHeight   = `${labelH}px`;
+    label.style.left         = `${(token.x + this.offsetX) * this.scale}px`;
+    label.style.top          = `${(token.y + this.offsetY) * this.scale - totalOffset}px`;
+    label.style.width        = `${token.width * this.scale}px`;
+    label.style.opacity      = (this.isDM && token.hidden) ? '0.5' : '1';
+  }
+
   renderToken(token) {
     if (!this.isDM && token.hidden) {
       return;
@@ -113,8 +163,9 @@ export class SceneRenderer {
     element.draggable = false;
 
     this.container.appendChild(element);
+    this._syncHpBar(token);
+    this._syncConditionLabel(token);
 
-    // Optionally, you can return the element if needed
     return element;
   }
 
@@ -125,16 +176,21 @@ export class SceneRenderer {
       this.updateTokenElement(token);
     });
 
-    // Keep grid canvas in sync with zoom/pan
+    // Keep grid canvas in sync with zoom/pan.
+    // Use phase (modulo) instead of raw offset so the canvas always starts
+    // near screen (0,0) and never leaves the top/left of the viewport uncovered.
+    const _gridSpacing = (window.VTT_GRID_SIZE || 60) * this.scale;
+    const _phaseX = ((this.offsetX * this.scale) % _gridSpacing + _gridSpacing) % _gridSpacing;
+    const _phaseY = ((this.offsetY * this.scale) % _gridSpacing + _gridSpacing) % _gridSpacing;
     const gridCanvas = document.getElementById('paint-grid-canvas');
     if (gridCanvas) {
       gridCanvas.style.transformOrigin = '0 0';
-      gridCanvas.style.transform = `translate(${this.offsetX * this.scale}px, ${this.offsetY * this.scale}px) scale(${this.scale})`;
+      gridCanvas.style.transform = `translate(${_phaseX}px, ${_phaseY}px) scale(${this.scale})`;
     }
     const playerGridCanvas = document.getElementById('player-grid-canvas');
     if (playerGridCanvas) {
       playerGridCanvas.style.transformOrigin = '0 0';
-      playerGridCanvas.style.transform = `translate(${this.offsetX * this.scale}px, ${this.offsetY * this.scale}px) scale(${this.scale})`;
+      playerGridCanvas.style.transform = `translate(${_phaseX}px, ${_phaseY}px) scale(${this.scale})`;
     }
   }
 
@@ -146,6 +202,8 @@ export class SceneRenderer {
       if (element && element.parentNode === this.container) {
         this.container.removeChild(element);
       }
+      this._syncHpBar(token);
+      this._syncConditionLabel(token);
       return;
     }
   
@@ -157,7 +215,7 @@ export class SceneRenderer {
       element.style.height = `${token.height * this.scale}px`;
       element.style.transform = `rotate(${token.rotation}deg)`;
       element.style.zIndex = token.zIndex || 0;
-  
+
       if (this.isDM && token.hidden) {
         element.style.opacity = '0.5';
       } else {
@@ -168,6 +226,8 @@ export class SceneRenderer {
       this.renderToken(token);
       // Optionally set up token interactions
     }
+    this._syncHpBar(token);
+    this._syncConditionLabel(token);
   }
 
   resetCamera() {

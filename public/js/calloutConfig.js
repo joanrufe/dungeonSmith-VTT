@@ -1,8 +1,8 @@
 (function () {
   const config = {
     colors: {
-      initiative: '#4CAF50',
-      roll: '#4CAF50',
+      initiative: '#ff7a18',
+      roll: '#ff7a18',
     },
     outline: {
       color: '#000000',
