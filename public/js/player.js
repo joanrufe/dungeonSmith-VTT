@@ -7,11 +7,41 @@ import { TokenManager } from './tokenManager.js';
 const socket = io({ query: { role: 'player' } });
 
 let currentScene = null;
+let pendingSnapView = null;
 
 const sceneContainer = document.getElementById('scene-container');
 const sceneRenderer = new SceneRenderer(sceneContainer, false);
 const panZoomHandler = new PanZoomHandler(sceneContainer, sceneRenderer);
 const tokenManager = new TokenManager(sceneRenderer, socket, false);
+
+// Expose globally for shared tools (ping, dice roller, tokenTool)
+window.VTT_PLAYER = {
+  socket: socket,
+  get currentScene() { return currentScene; },
+  sceneRenderer: sceneRenderer,
+  drawPing: function(data) {
+    const pingEl = document.createElement('div');
+    pingEl.className = 'scene-ping';
+    pingEl.style.position = 'absolute';
+    // Calculate current screen bounds for this ping's absolute world position
+    const px = (data.x + sceneRenderer.offsetX) * sceneRenderer.scale;
+    const py = (data.y + sceneRenderer.offsetY) * sceneRenderer.scale;
+    pingEl.style.left = `${px}px`;
+    pingEl.style.top = `${py}px`;
+    pingEl.style.transform = 'translate(-50%, -50%)';
+    pingEl.style.borderColor = data.color;
+    
+    // Parse hex to rgba for background
+    const isGreen = data.color === '#00FF00';
+    pingEl.style.backgroundColor = isGreen ? 'rgba(0, 255, 0, 0.4)' : 'rgba(0, 170, 255, 0.4)';
+
+    sceneContainer.appendChild(pingEl);
+
+    setTimeout(() => {
+      if (pingEl.parentNode) pingEl.remove();
+    }, 1000);
+  }
+};
 
 // Music management properties
 const musicTracks = {}; // Object to store tracks by trackId
@@ -32,6 +62,11 @@ function loadScene(sceneId) {
 socket.on('sceneData', (scene) => {
   currentScene = scene;
   renderScene(scene);
+
+  if (pendingSnapView && pendingSnapView.sceneId === scene.sceneId) {
+    panZoomHandler.applyView(pendingSnapView.scale, pendingSnapView.offsetX, pendingSnapView.offsetY);
+    pendingSnapView = null;
+  }
 });
 
 // Function to render a scene
@@ -59,8 +94,10 @@ socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
     // Update the DOM element
     sceneRenderer.updateTokenElement(token);
 
-    // Update interactions
-    tokenManager.setupTokenInteractions(token);
+    // Only re-setup interactions when interaction-relevant props change
+    if ('movableByPlayers' in properties || 'hidden' in properties) {
+      tokenManager.setupTokenInteractions(token);
+    }
   } else {
     // Token might have been unhidden
     if (!properties.hidden) {
@@ -240,5 +277,96 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check if audio has already been enabled
   if (!audioEnabled) {
     enableAudioButton.style.display = 'block';
+  }
+});
+
+// ─── Snap to View ──────────────────────────────────────────────────────────
+socket.on('snapView', ({ sceneId, scale, offsetX, offsetY }) => {
+  if (sceneId && (!currentScene || currentScene.sceneId !== sceneId)) {
+    pendingSnapView = { sceneId, scale, offsetX, offsetY };
+    loadScene(sceneId);
+    return;
+  }
+
+  panZoomHandler.applyView(scale, offsetX, offsetY);
+});
+
+// ─── Background Color Sync ────────────────────────────────────────────────
+socket.on('setBgColor', ({ color }) => {
+  // Route through renderer so the z-indexed bg-div is used (not container backgroundColor,
+  // which would hide children with negative z-index like paint tiles)
+  sceneRenderer.setBackgroundColor(color);
+});
+
+// ─── Grid Overlay (player side) ───────────────────────────────────────────
+let playerGridCanvas = null;
+window.VTT_GRID_SIZE = 60;
+window.VTT_GRID_TYPE = 'square';
+
+function buildPlayerGrid(size, gridType = 'square') {
+  if (playerGridCanvas) playerGridCanvas.remove();
+  playerGridCanvas = document.createElement('canvas');
+  playerGridCanvas.id = 'player-grid-canvas';
+  playerGridCanvas.style.cssText = `
+    position:absolute; top:0; left:0;
+    pointer-events:none; z-index:1; opacity:.35;
+    width:6000px; height:6000px;`;
+  playerGridCanvas.width  = 6000;
+  playerGridCanvas.height = 6000;
+  drawPlayerGrid(size, gridType);
+  sceneContainer.appendChild(playerGridCanvas);
+}
+
+function drawPlayerGrid(size, gridType = 'square') {
+  if (!playerGridCanvas) return;
+  if (!window.VTT_GRID_RENDERER) return;
+  window.VTT_GRID_RENDERER.drawGrid(playerGridCanvas, {
+    size,
+    type: gridType,
+    color: 'rgba(255,255,255,0.5)',
+  });
+}
+
+socket.on('toggleGrid', ({ visible, gridSize, gridType }) => {
+  window.VTT_GRID_SIZE = gridSize || window.VTT_GRID_SIZE || 60;
+  window.VTT_GRID_TYPE = gridType || window.VTT_GRID_TYPE || 'square';
+  if (visible) {
+    if (!playerGridCanvas || !sceneContainer.contains(playerGridCanvas)) {
+      buildPlayerGrid(window.VTT_GRID_SIZE, window.VTT_GRID_TYPE);
+    } else {
+      drawPlayerGrid(window.VTT_GRID_SIZE, window.VTT_GRID_TYPE); // redraw in case size changed
+      playerGridCanvas.style.display = '';
+    }
+  } else {
+    // Hide
+    if (playerGridCanvas) playerGridCanvas.style.display = 'none';
+  }
+});
+
+// ─── Double Click Ping (Player Side) ──────────────────────────────────────
+sceneContainer.addEventListener('dblclick', (event) => {
+  if (event.target !== sceneContainer && event.target.id !== 'scene-bg-el' && event.target.id !== 'player-grid-canvas') {
+    return; // Only ping on the background
+  }
+
+  const rect = sceneContainer.getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+  const mouseY = event.clientY - rect.top;
+
+  // Convert screen coordinates to world coordinates
+  const worldX = (mouseX / sceneRenderer.scale) - sceneRenderer.offsetX;
+  const worldY = (mouseY / sceneRenderer.scale) - sceneRenderer.offsetY;
+
+  const color = '#00AAFF'; // Players are always blue
+
+  const data = { x: worldX, y: worldY, color };
+  socket.emit('pingScene', data);
+  window.VTT_PLAYER.drawPing(data); // Draw locally
+});
+
+// Listen for pings from other users (DM or other players)
+socket.on('pingScene', (data) => {
+  if (window.VTT_PLAYER) {
+    window.VTT_PLAYER.drawPing(data);
   }
 });

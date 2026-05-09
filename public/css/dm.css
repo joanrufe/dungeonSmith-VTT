@@ -9,7 +9,157 @@
   box-sizing: border-box;
   z-index: 100;
   transition: top 0.3s;
+  background: rgba(15, 15, 20, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+/* Right-aligned toolbar controls */
+#toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Separator line in toolbar */
+.toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: #555;
+}
+
+/* Panel open/close toggle buttons */
+.toolbar-panel-btn {
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.toolbar-panel-btn:hover  { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.25); }
+.toolbar-panel-btn.active-tool-btn { background: rgba(211, 47, 47, 0.8); border-color: #d32f2f; }
+
+#ruler-mode-indicator {
+  top: 58px;
+  right: 14px;
+}
+
+/* Hidden state for collapsible panels */
+.panel-hidden { display: none !important; }
+
+/* Drag handle at top of each panel */
+.panel-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d32f2f;
+  letter-spacing: 1px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  cursor: grab;
+  user-select: none;
+}
+.panel-drag-handle:active { cursor: grabbing; }
+.drag-hint {
+  font-size: 14px;
+  color: rgba(255,255,255,0.3);
+  margin-left: 6px;
+}
+
+.toolbar-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #ccc;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.grid-adj-btn {
+  padding: 2px 8px;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.grid-adj-btn:hover { background: rgba(255,255,255,0.2); }
+
+#grid-size-display {
+  min-width: 28px;
+  text-align: center;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#help-btn {
+  padding: 4px 10px;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+#help-btn:hover { background: rgba(255,255,255,0.2); }
+
+/* Help Modal */
+.help-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.help-modal.hidden { display: none; }
+
+.help-content {
+  background: #1a1a2a;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  padding: 28px 32px;
+  min-width: 360px;
+  color: white;
+  position: relative;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+}
+
+.help-content h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.help-close {
+  position: absolute;
+  top: 12px; right: 16px;
+  font-size: 22px;
+  cursor: pointer;
+  color: #888;
+  line-height: 1;
+}
+.help-close:hover { color: white; }
+
+
 
 #toolbar input {
   padding: 5px;
@@ -70,11 +220,16 @@
 }
 
 .scene-button.active {
-  background-color: #007bff;
+  background-color: #1a7fd4;
+  box-shadow: 0 0 0 2px #5aaeff;
 }
 
 .scene-button:hover {
   background-color: #505050;
+}
+
+.scene-button.active:hover {
+  background-color: #1a7fd4;
 }
 
 .instructions {
@@ -126,33 +281,64 @@ ul {
   margin: 0;
 }
 
-/* Music Panel Styles */
-#music-panel {
+/* ================================================================
+   RIGHT TOOLS TRAY  (button strip only – floats from right edge)
+   ================================================================ */
+#dm-tool-tray {
   position: fixed;
-  top: 50px; /* Adjust this value if your toolbar height is different */
+  top: 45px;
   right: 0;
-  width: 300px; /* Adjust the width as needed */
-  height: fit-content;
-  background-color: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(16px);
-  padding: 10px;
-  color: #fff;
-  overflow-y: auto;
-  z-index: 200; /* Adjusted z-index */
-  border: white 1px solid;
-  border-radius: 10px 0 0 10px;
-  transition: transform 0.3s ease;
-  transform: translateX(0); /* Visible by default */
+  width: 90px;
+  background: rgba(15, 15, 25, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 0 0 10px;
+  z-index: 2700;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.22s ease;
 }
 
-/* Hidden state */
-#music-panel.hidden {
-  transform: translateX(100%); /* Slide out to the right when hidden */
+#dm-tool-tray.tray-hidden {
+  transform: translateX(100%);
 }
 
-/* Adjust the scene-container to avoid overlap if necessary */
-#scene-container {
-  margin-right: 300px; /* Same width as music panel */
+.tray-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: rgba(40, 40, 60, 0.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 8px 4px 6px;
+  font-size: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+.tray-btn i { font-size: 16px; }
+.tray-btn:hover  { background: rgba(92,138,255,0.25); color: #fff; }
+.tray-btn.active-tool-btn { background: rgba(92,138,255,0.4); color: #fff; border-color: #5c8aff; }
+
+/* Floating panel default positions (DM page) */
+#music-panel      { top: 50px; right: 110px; }
+#initiative-panel { top: 50px; right: 410px; }
+#paint-panel      { top: 50px; right: 410px; }
+#dice-panel       { top: 50px; right: 110px; }
+
+/* Brush size slider row */
+.paint-brush-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #ccc;
 }
 
 /* Music Tracks List */
@@ -214,6 +400,7 @@ ul {
 
 .volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none; /* Override default look */
+  appearance: none;
   width: 12px;
   height: 12px;
   background: #007bff;
@@ -270,4 +457,290 @@ ul {
 .scene-button.placeholder {
   background-color: #444;
   border: 2px dashed #666;
+}
+
+/* ================================================================
+   INITIATIVE TRACKER PANEL
+   ================================================================ */
+
+#initiative-panel h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: #d32f2f;
+}
+
+.init-input-row {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.init-input-row input[type="text"] {
+  flex: 1;
+  padding: 5px 7px;
+  background: #2a2a38;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: white;
+  font-size: 12px;
+}
+
+.init-input-row input[type="number"] {
+  width: 55px;
+  padding: 5px 4px;
+  background: #2a2a38;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: white;
+  font-size: 12px;
+}
+
+.init-input-row button,
+.init-action-row button {
+  padding: 5px 10px;
+  background: #3a3a50;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+
+.init-input-row button:hover,
+.init-action-row button:hover { background: #d32f2f; }
+
+.init-action-row {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+.init-action-row button { flex: 1; }
+
+.init-hint {
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.init-round-display {
+  color: #ddd;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin: 4px 0 8px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+#init-list { list-style: none; padding: 0; margin: 0; max-height: 260px; overflow-y: auto; overflow-x: hidden; }
+
+.init-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 6px;
+  background: #242430;
+  border-radius: 4px;
+  margin-bottom: 3px;
+}
+
+.init-row.init-active { background: #d32f2f; }
+
+.init-num {
+  font-size: 10px;
+  color: rgba(255,255,255,0.5);
+  min-width: 16px;
+  text-align: center;
+}
+
+.init-edit-name {
+  flex: 1;
+  min-width: 0;
+  max-width: 110px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 1px 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.init-edit-name:focus { outline: none; border-bottom-color: white; }
+
+.init-edit-val {
+  width: 45px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  text-align: center;
+  padding: 1px 3px;
+}
+.init-edit-val:focus { outline: none; border-bottom-color: white; color: white; }
+
+.init-remove-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 3px;
+  line-height: 1;
+}
+.init-remove-btn:hover { color: white; }
+.init-row.init-active .init-num,
+.init-row.init-active .init-edit-val { color: rgba(255,255,255,0.85); }
+
+/* ================================================================
+   PAINT MODE PANEL
+   ================================================================ */
+
+#paint-panel h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #d32f2f;
+  letter-spacing: 1px;
+}
+
+.paint-tools {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ptool {
+  font-size: 16px;
+  padding: 6px 0;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.1s;
+}
+
+.ptool:hover { transform: scale(1.1); }
+.ptool-active { border-color: white !important; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+
+.paint-grid-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.paint-grid-row label { display: flex; align-items: center; gap: 4px; }
+.paint-grid-row button {
+  margin-left: auto;
+  padding: 3px 8px;
+  background: #3a3a50;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+}
+.paint-grid-row button:hover { background: #d32f2f; }
+
+#paint-clear-btn {
+  width: 100%;
+  padding: 5px;
+  background: #3a3a50;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+}
+#paint-clear-btn:hover { background: #d32f2f; }
+
+/* Eraser button */
+#paint-eraser-btn {
+  width: 100%;
+  padding: 5px;
+  background: #3a3a50;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+  margin-top: 6px;
+}
+#paint-eraser-btn:hover { background: #555; }
+#paint-eraser-btn.ptool-active { background: #e65100; border-color: #e65100; }
+
+/* Custom button */
+#paint-custom-btn:hover { background: #555 !important; }
+#paint-custom-btn.ptool-active { background: #1565c0 !important; border-color: #1565c0 !important; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+
+/* Initiative announce bell button */
+.init-announce-btn {
+  background: rgba(92, 138, 255, 0.18);
+  border: 1px solid rgba(92, 138, 255, 0.35);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 8px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.init-announce-btn:hover {
+  background: rgba(255, 200, 0, 0.25);
+  border-color: #FFD700;
+  color: #FFD700;
+}
+.init-row.init-active .init-announce-btn {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.5);
+  color: white;
+}
+
+.init-remove-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 3px;
+  line-height: 1;
+}
+.init-remove-btn:hover { color: white; }
+
+/* ================================================================
+   MUSIC CONTROL PANEL
+   ================================================================ */
+
+#music-panel h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: #d32f2f;
+}
+
+#music-drop-area {
+  border: 2px dashed #555;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #aaa;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+#music-drop-area:hover, #music-drop-area.dragover {
+  border-color: #d32f2f;
+  background: rgba(211, 47, 47, 0.1);
+  color: #fff;
 }

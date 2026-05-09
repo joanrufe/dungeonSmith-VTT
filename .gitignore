@@ -1,8 +1,25 @@
-public/uploads/*
-!public/uploads/.gitkeep
-data/scenes/*
-!data/scenes/.gitkeep
-public/music/*
-!public/music/.gitkeep
-
+# Dependencies
 node_modules/
+
+# Local secrets
+secret.txt
+
+# Local AI/tooling state
+.claude/
+.codex/
+
+# Runtime scene data
+data/scenes/**
+!data/scenes/
+!data/scenes/.gitkeep
+
+# User-uploaded media and generated files
+public/uploads/**
+!public/uploads/
+!public/uploads/.gitkeep
+public/music/**
+!public/music/
+!public/music/.gitkeep
+public/media/**
+!public/media/
+!public/media/.gitkeep

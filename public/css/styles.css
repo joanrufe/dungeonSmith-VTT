@@ -1,5 +1,5 @@
 body {
-  font-family: 'Roboto', sans-serif;
+  font-family: 'Inter', sans-serif;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -42,4 +42,473 @@ body {
   height: 100%;
   /* overflow: hidden; */
   position: relative;
+}
+
+/* ── Player Initiative Sidebar ─────────────────────────────────── */
+#player-init-sidebar {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  z-index: 500;
+  background: rgba(30, 30, 45, 0.65);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0;
+  padding: 12px 10px;
+  min-width: 160px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 4px 8px 24px rgba(0, 0, 0, 0.4);
+  display: none;
+  pointer-events: none;
+}
+
+.pisb-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #d32f2f;
+  font-weight: 800;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.pisb-round {
+  color: rgba(255,255,255,0.75);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin: -4px 0 8px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.pisb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  margin-bottom: 3px;
+}
+
+.pisb-row.pisb-active { background: #d32f2f; }
+
+.pisb-num  { font-size: 11px; color: rgba(255,255,255,0.5); min-width: 16px; text-align: center; }
+.pisb-name { flex: 1; font-size: 13px; font-weight: 600; color: white; }
+.pisb-init { font-size: 12px; color: rgba(255,255,255,0.6); font-weight: 700; }
+.pisb-row.pisb-active .pisb-num,
+.pisb-row.pisb-active .pisb-init { color: rgba(255,255,255,0.85); }
+
+/* ── Player Flourish Overlay ───────────────────────────────────── */
+#player-flourish {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+#player-flourish.hidden { display: none; }
+
+#player-flourish-name {
+  font-size: clamp(40px, 7vw, 90px);
+  font-weight: 900;
+  color: #4CAF50;
+  text-transform: uppercase;
+  letter-spacing: 6px;
+  text-align: center;
+  text-shadow:
+    -3px -3px 0 #000000,
+     0   -3px 0 #000000,
+     3px -3px 0 #000000,
+    -3px  0   0 #000000,
+     3px  0   0 #000000,
+    -3px  3px 0 #000000,
+     0    3px 0 #000000,
+     3px  3px 0 #000000,
+     0 0 10px currentColor,
+     0 0 28px currentColor;
+  animation: flourishIn 3.5s ease forwards;
+}
+
+@keyframes flourishIn {
+  /* 0 – 0.5s: fade in */
+  0%   { opacity: 0; transform: scale(0.5) translateY(60px); filter: blur(12px); }
+  14%  { opacity: 1; transform: scale(1.04) translateY(0);   filter: blur(0); }
+  20%  { transform: scale(1) translateY(0); }
+  /* 0.5 – 2.5s: hold sharp */
+  71%  { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+  /* 2.5 – 3.5s: fade out — sharp for 1s, blur only at the end */
+  99%  { opacity: 0; transform: scale(1.05) translateY(-20px); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.1)  translateY(-25px); filter: blur(6px); }
+}
+
+/* ── Player Help Button ──────────────────────────────────────────── */
+#player-help-btn {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  z-index: 600;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(30, 30, 45, 0.65);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+#player-help-btn:hover { background: rgba(211,47,47,0.7); }
+
+.player-ruler-btn {
+  position: fixed;
+  top: 10px;
+  right: 138px;
+  z-index: 1002;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  background: rgba(30, 30, 45, 0.65);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.player-ruler-btn:hover,
+.player-ruler-btn.active-tool-btn {
+  background: rgba(92,138,255,0.55);
+  border-color: #5c8aff;
+}
+
+#ruler-mode-indicator {
+  position: fixed;
+  top: 52px;
+  right: 14px;
+  z-index: 2600;
+  padding: 6px 10px;
+  border: 1px solid #ffd166;
+  border-radius: 4px;
+  background: rgba(20, 20, 24, 0.82);
+  color: #ffd166;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+
+/* ── Player Help Modal ───────────────────────────────────────────── */
+.player-help-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.player-help-modal.hidden { display: none; }
+
+.player-help-content {
+  background: rgba(30, 30, 45, 0.65);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  padding: 26px 30px;
+  min-width: 320px;
+  color: white;
+  position: relative;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+}
+.player-help-content h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+.player-help-close {
+  position: absolute;
+  top: 12px; right: 16px;
+  font-size: 22px;
+  cursor: pointer;
+  color: #888;
+}
+.player-help-close:hover { color: white; }
+
+/* ── Shared Help Table Styles ────────────────────────────────────── */
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.help-table th {
+  text-align: left;
+  color: #d32f2f;
+  padding: 10px 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.help-table td {
+  padding: 6px 8px 6px 0;
+  color: #ccc;
+  vertical-align: middle;
+}
+.help-table td:first-child { width: 160px; }
+
+kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  color: white;
+  margin-right: 2px;
+}
+
+#player-init-wrapper {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  z-index: 500;
+  display: none;           /* hidden until init data arrives */
+  flex-direction: row;
+  align-items: stretch;
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* The sidebar itself keeps its existing pisb-* styles */
+#player-init-wrapper #player-init-sidebar {
+  /* override the old fixed positioning since wrapper handles it */
+  position: static;
+  transform: none;
+  display: block;
+}
+
+/* Collapsed state: slide the sidebar out, leaving only the 18px tab visible */
+#player-init-wrapper.init-collapsed {
+  transform: translate(calc(-100% + 18px), -50%);
+}
+
+/* Collapse/expand button — vertical tab on the right edge */
+#player-init-collapse-btn {
+  width: 18px;
+  align-self: stretch;
+  background: rgba(211, 47, 47, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: none;
+  border-right: 1px solid rgba(255,255,255,0.2);
+  border-top: 1px solid rgba(255,255,255,0.2);
+  border-bottom: 1px solid rgba(255,255,255,0.2);
+  border-left: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0 8px 8px 0;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  writing-mode: vertical-lr;
+  transition: background 0.15s;
+}
+#player-init-collapse-btn:hover { background: #d32f2f; }
+
+/* paint layer row */
+.paint-layer-row {
+  margin-top: 6px;
+}
+.paint-layer-row input[type="range"] {
+  accent-color: #d32f2f;
+}
+
+/* ================================================================
+   3D DICE ROLLER PANEL & CANVAS
+   ================================================================ */
+
+/* The invisible overlay where 3d dice are rendered */
+#dice-box-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2500;
+  pointer-events: none; /* Let clicks pass through to map */
+  overflow: hidden;
+}
+#dice-box-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* --- Floating Draggable Panels (shared by player + DM) --- */
+.draggable-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 280px;
+  background: rgba(30, 30, 45, 0.65);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  color: #fff;
+  z-index: 2600;
+  box-shadow: -4px 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.panel-hidden { display: none !important; }
+
+.panel-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #5c8aff;
+  letter-spacing: 1px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: grab;
+  user-select: none;
+}
+.panel-drag-handle:active { cursor: grabbing; }
+.drag-hint { font-size: 14px; color: rgba(255,255,255,0.3); margin-left: 6px; }
+
+.dice-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #5c8aff;
+  font-weight: 800;
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+#dice-status {
+  display: block;
+  font-size: 8px;
+  color: #888;
+  margin-bottom: 10px;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.dice-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.dice-btn {
+  padding: 6px;
+  background: #3a3a50;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dice-btn:hover { background: #5c8aff; border-color: #8bb1ff; }
+
+.dice-clear-btn {
+  background: rgba(211, 47, 47, 0.7);
+  border-color: #d32f2f;
+}
+.dice-clear-btn:hover { background: #d32f2f; }
+
+.dice-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 10px;
+}
+
+.dice-config-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #ccc;
+}
+
+.dice-config-item select, .dice-config-item input[type="color"] {
+  background: #1a1a2a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: white;
+  padding: 2px 4px;
+}
+
+.dice-config-item input[type="checkbox"] {
+  cursor: pointer;
+}
+
+#dice-result-log {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #4CAF50;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+/* ================================================================
+   PING ANIMATION
+   ================================================================ */
+.scene-ping {
+  border: 4px solid;
+  border-radius: 50%;
+  border-style: double;
+  pointer-events: none;
+  z-index: 500;
+  width: 0px;
+  height: 0px;
+  animation: ping-anim 1s ease-out forwards;
+}
+
+@keyframes ping-anim {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 1;
+    border-width: 4px;
+  }
+  100% {
+    width: 150px;
+    height: 150px;
+    opacity: 0;
+    border-width: 1px;
+  }
 }

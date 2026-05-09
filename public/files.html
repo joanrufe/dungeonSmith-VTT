@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>MiniVTT – Media Library</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0d0d1a;
+      color: #e0e0f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    #topbar h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #5c8aff;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
+    .top-btn {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 5px;
+      color: #e0e0f0;
+      padding: 5px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .top-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
+    .top-btn.primary { background: rgba(92,138,255,0.2); border-color: rgba(92,138,255,0.4); color: #8ab4ff; }
+    .top-btn.primary:hover { background: rgba(92,138,255,0.35); }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: rgba(255,255,255,0.55);
+      padding: 6px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab-btn:hover { color: #e0e0f0; }
+    .tab-btn.active { color: #8ab4ff; border-bottom-color: #5c8aff; }
+    #search-input {
+      margin-left: auto;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: #e0e0f0;
+      padding: 5px 10px;
+      font-size: 12px;
+      width: 180px;
+      outline: none;
+    }
+    #search-input:focus { border-color: #5c8aff; }
+    #status-msg {
+      font-size: 11px;
+      color: #5c8aff;
+      min-width: 140px;
+      text-align: right;
+    }
+
+    /* ── Main layout ── */
+    #main { display: flex; flex: 1; overflow: hidden; }
+    .tab-view.hidden { display: none !important; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 190px;
+      flex-shrink: 0;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    #sidebar-folders { flex: 1; padding: 8px 0; }
+    .folder-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: background 0.15s;
+    }
+    .folder-item:hover { background: rgba(255,255,255,0.06); }
+    .folder-item.active {
+      background: rgba(92,138,255,0.15);
+      border-left-color: #5c8aff;
+      color: #5c8aff;
+    }
+    .folder-item i { font-size: 11px; opacity: 0.7; flex-shrink: 0; }
+    .folder-item span.fname {
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .folder-count { font-size: 10px; opacity: 0.4; flex-shrink: 0; }
+    .folder-actions {
+      display: none;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .folder-item:hover .folder-actions { display: flex; }
+    .folder-item:hover .folder-count   { display: none; }
+    .folder-act-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.4);
+      cursor: pointer;
+      padding: 1px 3px;
+      font-size: 10px;
+      border-radius: 3px;
+      line-height: 1;
+    }
+    .folder-act-btn:hover { color: #e0e0f0; background: rgba(255,255,255,0.1); }
+    .folder-act-btn.del:hover { color: #e74c3c; }
+
+    /* ── Drop zone ── */
+    #drop-zone {
+      margin: 10px 12px;
+      border: 2px dashed rgba(255,255,255,0.12);
+      border-radius: 8px;
+      padding: 14px 10px;
+      text-align: center;
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+    #drop-zone:hover, #drop-zone.dragover {
+      border-color: #5c8aff;
+      background: rgba(92,138,255,0.08);
+      color: #8ab4ff;
+    }
+    #drop-zone i { display: block; font-size: 20px; margin-bottom: 6px; opacity: 0.5; }
+    #file-input { display: none; }
+
+    /* ── Grid area ── */
+    #grid-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      position: relative;
+    }
+    #grid-area.dragover::after {
+      content: "Drop files here to upload";
+      position: fixed;
+      inset: 42px 0 0 190px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px dashed #5c8aff;
+      background: rgba(10, 12, 24, 0.76);
+      color: #8ab4ff;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      z-index: 40;
+      pointer-events: none;
+    }
+    #grid-area::-webkit-scrollbar { width: 6px; }
+    #grid-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 12px;
+    }
+
+    /* ── Upload progress bar ── */
+    #upload-bar {
+      display: none;
+      height: 3px;
+      background: rgba(255,255,255,0.06);
+      margin-bottom: 12px;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #upload-bar-fill {
+      height: 100%;
+      background: #5c8aff;
+      width: 0%;
+      transition: width 0.2s;
+    }
+
+    .thumb-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      overflow: visible;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+      user-select: none;
+      position: relative;
+    }
+    .thumb-card:hover {
+      border-color: rgba(92,138,255,0.5);
+      box-shadow: 0 0 10px rgba(92,138,255,0.2);
+      transform: translateY(-1px);
+    }
+    .thumb-card.adding {
+      border-color: #4CAF50;
+      box-shadow: 0 0 12px rgba(76,175,80,0.4);
+    }
+    .thumb-inner { border-radius: 7px; overflow: hidden; }
+    .thumb-img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: contain;
+      background: rgba(0,0,0,0.3);
+      display: block;
+    }
+    .file-icon {
+      width: 100%;
+      aspect-ratio: 1;
+      background: rgba(0,0,0,0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      color: #8ab4ff;
+    }
+    .file-icon i { font-size: 34px; }
+    .file-icon span {
+      font-size: 10px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.65);
+      text-transform: uppercase;
+    }
+    .thumb-label {
+      padding: 5px 6px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.6);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .thumb-delete {
+      display: none;
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 18px;
+      height: 18px;
+      background: #c0392b;
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-size: 9px;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      line-height: 1;
+    }
+    .thumb-card:hover .thumb-delete { display: flex; }
+    .thumb-delete:hover { background: #e74c3c; }
+
+    #empty-msg {
+      color: rgba(255,255,255,0.25);
+      font-size: 13px;
+      text-align: center;
+      margin-top: 60px;
+      display: none;
+    }
+    #empty-msg i { display: block; font-size: 36px; margin-bottom: 10px; opacity: 0.3; }
+
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    #password-panel {
+      flex: 1;
+      overflow: auto;
+      padding: 24px;
+    }
+    .settings-card {
+      max-width: 520px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      padding: 18px;
+    }
+    .settings-card h2 {
+      font-size: 16px;
+      color: #8ab4ff;
+      margin-bottom: 14px;
+    }
+    .password-row {
+      display: grid;
+      grid-template-columns: 120px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .password-row label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      font-weight: 700;
+    }
+    .password-row input {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 5px;
+      color: #e0e0f0;
+      padding: 7px 9px;
+      outline: none;
+    }
+    .password-row input:focus { border-color: #5c8aff; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <i class="fa-solid fa-photo-film" style="color:#5c8aff;font-size:15px;"></i>
+  <h1>Media Library</h1>
+  <button class="tab-btn active" id="files-tab-btn">Files</button>
+  <button class="tab-btn" id="passwords-tab-btn">Passwords</button>
+  <button class="top-btn" id="new-folder-btn"><i class="fa-solid fa-folder-plus"></i> New Folder</button>
+  <button class="top-btn primary" id="upload-btn"><i class="fa-solid fa-upload"></i> Upload</button>
+  <input type="file" id="file-input" multiple accept="image/*,video/*,application/pdf,text/*,.txt,.md,.json,.csv,.log">
+  <input type="text" id="search-input" placeholder="Search files…">
+  <div id="status-msg">Double-click to add to scene</div>
+</div>
+
+<div id="main" class="tab-view">
+  <div id="sidebar">
+    <div id="sidebar-folders"></div>
+    <div id="drop-zone">
+      <i class="fa-solid fa-cloud-arrow-up"></i>
+      Drop files here<br>to upload
+    </div>
+  </div>
+  <div id="grid-area">
+    <div id="upload-bar"><div id="upload-bar-fill"></div></div>
+    <div id="grid"></div>
+    <div id="empty-msg"><i class="fa-solid fa-folder-open"></i>No files in this folder</div>
+  </div>
+</div>
+
+<div id="password-panel" class="tab-view hidden">
+  <div class="settings-card">
+    <h2><i class="fa-solid fa-key"></i> Passwords</h2>
+    <div class="password-row">
+      <label for="dm-password-input">DM Password</label>
+      <input type="text" id="dm-password-input" autocomplete="off">
+      <button class="top-btn primary" id="update-dm-password-btn">Update</button>
+    </div>
+    <div class="password-row">
+      <label for="player-password-input">Player Password</label>
+      <input type="text" id="player-password-input" autocomplete="off">
+      <button class="top-btn primary" id="update-player-password-btn">Update</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function () {
+  const socket       = io({ query: { role: 'dm' } });
+  const sidebarEl    = document.getElementById('sidebar-folders');
+  const mainEl       = document.getElementById('main');
+  const passwordPanel = document.getElementById('password-panel');
+  const gridArea     = document.getElementById('grid-area');
+  const grid         = document.getElementById('grid');
+  const emptyMsg     = document.getElementById('empty-msg');
+  const searchEl     = document.getElementById('search-input');
+  const statusEl     = document.getElementById('status-msg');
+  const dropZone     = document.getElementById('drop-zone');
+  const fileInput    = document.getElementById('file-input');
+  const uploadBar    = document.getElementById('upload-bar');
+  const uploadFill   = document.getElementById('upload-bar-fill');
+  const filesTabBtn  = document.getElementById('files-tab-btn');
+  const passwordsTabBtn = document.getElementById('passwords-tab-btn');
+  const dmPasswordInput = document.getElementById('dm-password-input');
+  const playerPasswordInput = document.getElementById('player-password-input');
+
+  let allData      = { folders: [], rootFiles: [] };
+  let activeFolder = '__all__';
+
+  // ── Load ─────────────────────────────────────────────────
+  function reload() {
+    fetch('/mediaList')
+      .then(r => r.json())
+      .then(data => {
+        allData = data;
+        buildSidebar();
+        showFolder(activeFolder);
+      })
+      .catch(() => setStatus('Failed to load media list.', 'tomato'));
+  }
+  reload();
+
+  filesTabBtn.addEventListener('click', () => showTab('files'));
+  passwordsTabBtn.addEventListener('click', () => showTab('passwords'));
+  document.getElementById('update-dm-password-btn').addEventListener('click', () => updatePasswords('DM password updated.'));
+  document.getElementById('update-player-password-btn').addEventListener('click', () => updatePasswords('Player password updated.'));
+
+  function showTab(tab) {
+    const showPasswords = tab === 'passwords';
+    mainEl.classList.toggle('hidden', showPasswords);
+    passwordPanel.classList.toggle('hidden', !showPasswords);
+    filesTabBtn.classList.toggle('active', !showPasswords);
+    passwordsTabBtn.classList.toggle('active', showPasswords);
+    document.getElementById('new-folder-btn').style.display = showPasswords ? 'none' : '';
+    document.getElementById('upload-btn').style.display = showPasswords ? 'none' : '';
+    searchEl.style.display = showPasswords ? 'none' : '';
+    if (showPasswords) loadPasswords();
+  }
+
+  function loadPasswords() {
+    fetch('/passwords')
+      .then(r => r.json())
+      .then(data => {
+        dmPasswordInput.value = data.dmPassword || '';
+        playerPasswordInput.value = data.playerPassword || '';
+      })
+      .catch(() => setStatus('Failed to load passwords.', 'tomato'));
+  }
+
+  function updatePasswords(message) {
+    fetch('/passwords', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dmPassword: dmPasswordInput.value,
+        playerPassword: playerPasswordInput.value,
+      }),
+    })
+      .then(r => r.json().then(data => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok || !data.ok) {
+          setStatus(data.error || 'Password update failed.', 'tomato');
+          return;
+        }
+        setStatus(message, '#4CAF50');
+      })
+      .catch(() => setStatus('Password update failed.', 'tomato'));
+  }
+
+  // ── Sidebar ──────────────────────────────────────────────
+  function buildSidebar() {
+    sidebarEl.innerHTML = '';
+    const allCount = allData.rootFiles.length +
+      allData.folders.reduce((n, f) => n + f.files.length, 0);
+    addFolderItem('__all__', 'fa-layer-group', 'All Files', allCount);
+    if (allData.rootFiles.length > 0)
+      addFolderItem('__root__', 'fa-inbox', 'Unsorted', allData.rootFiles.length);
+    allData.folders.forEach(f => addFolderItem(f.name, 'fa-folder', f.name, f.files.length));
+  }
+
+  function addFolderItem(key, icon, label, count) {
+    const el = document.createElement('div');
+    el.className = 'folder-item' + (key === activeFolder ? ' active' : '');
+    const isRealFolder = key !== '__all__' && key !== '__root__';
+    el.innerHTML = `
+      <i class="fa-solid ${icon}"></i>
+      <span class="fname">${label}</span>
+      <span class="folder-count">${count}</span>
+      ${isRealFolder ? `
+        <span class="folder-actions">
+          <button class="folder-act-btn rename-btn" title="Rename"><i class="fa-solid fa-pencil"></i></button>
+          <button class="folder-act-btn del del-btn"    title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </span>` : ''}`;
+    el.addEventListener('click', () => showFolder(key));
+    if (isRealFolder) {
+      el.querySelector('.rename-btn').addEventListener('click', e => { e.stopPropagation(); renameFolder(key); });
+      el.querySelector('.del-btn').addEventListener('click',    e => { e.stopPropagation(); deleteFolder(key); });
+    }
+    sidebarEl.appendChild(el);
+  }
+
+  // ── Show folder ──────────────────────────────────────────
+  function showFolder(key) {
+    // Fall back to __all__ if the folder no longer exists
+    const validKeys = ['__all__', '__root__', ...allData.folders.map(f => f.name)];
+    activeFolder = validKeys.includes(key) ? key : '__all__';
+    document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+    const items = sidebarEl.querySelectorAll('.folder-item');
+    const keys  = ['__all__', allData.rootFiles.length > 0 ? '__root__' : null, ...allData.folders.map(f => f.name)].filter(Boolean);
+    const idx   = keys.indexOf(activeFolder);
+    if (idx >= 0 && items[idx]) items[idx].classList.add('active');
+    renderGrid(getFiles(activeFolder));
+  }
+
+  function getFiles(key) {
+    if (key === '__all__') return [...allData.rootFiles, ...allData.folders.flatMap(f => f.files)];
+    if (key === '__root__') return allData.rootFiles;
+    const folder = allData.folders.find(f => f.name === key);
+    return folder ? folder.files : [];
+  }
+
+  // ── Render grid ──────────────────────────────────────────
+  function renderGrid(files) {
+    const query    = searchEl.value.trim().toLowerCase();
+    const filtered = query ? files.filter(f => f.name.toLowerCase().includes(query)) : files;
+    grid.innerHTML = '';
+    emptyMsg.style.display = filtered.length === 0 ? 'block' : 'none';
+
+    filtered.forEach(file => {
+      const card = document.createElement('div');
+      card.className = 'thumb-card';
+      card.title = `${file.name}\nDouble-click image/video to add to scene\nShift-click to download`;
+
+      // Delete button
+      const delBtn = document.createElement('button');
+      delBtn.className = 'thumb-delete';
+      delBtn.innerHTML = '✕';
+      delBtn.title = 'Delete file';
+      delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteFile(file); });
+      card.appendChild(delBtn);
+
+      const inner = document.createElement('div');
+      inner.className = 'thumb-inner';
+
+      if (file.mediaType === 'image') {
+        const img = document.createElement('img');
+        img.src = file.url;
+        img.className = 'thumb-img';
+        img.loading = 'lazy';
+        inner.appendChild(img);
+      } else {
+        inner.appendChild(makeFileIcon(file));
+      }
+
+      const label = document.createElement('div');
+      label.className = 'thumb-label';
+      label.textContent = file.name;
+      inner.appendChild(label);
+      card.appendChild(inner);
+
+      card.addEventListener('click', e => {
+        if (e.shiftKey) downloadFile(file);
+      });
+      card.addEventListener('dblclick', () => addToScene(file, card));
+      grid.appendChild(card);
+    });
+  }
+
+  function makeFileIcon(file) {
+    const icon = document.createElement('div');
+    icon.className = 'file-icon';
+    const meta = getFileMeta(file);
+    icon.innerHTML = `<i class="fa-solid ${meta.icon}"></i><span>${meta.label}</span>`;
+    return icon;
+  }
+
+  function getFileMeta(file) {
+    if (file.mediaType === 'video') return { icon: 'fa-file-video', label: 'Video' };
+    if (file.mediaType === 'pdf') return { icon: 'fa-file-pdf', label: 'PDF' };
+    if (file.mediaType === 'text') return { icon: 'fa-file-lines', label: 'Text' };
+    return { icon: 'fa-file', label: 'File' };
+  }
+
+  function downloadFile(file) {
+    const link = document.createElement('a');
+    link.href = file.url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setStatus('Download started.', '#8ab4ff');
+  }
+
+  // ── Add to scene ─────────────────────────────────────────
+  function addToScene(file, card) {
+    if (file.mediaType !== 'image' && file.mediaType !== 'video') {
+      setStatus('Only images and videos can be added to the scene.', '#aaa');
+      return;
+    }
+    if (file.mediaType === 'video') {
+      socket.emit('addTokenFromLibrary', { imageUrl: file.url, mediaType: 'video', width: 200, height: 200 });
+      flashCard(card);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 200;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > h) { if (w > MAX) { h = h * (MAX / w); w = MAX; } }
+      else        { if (h > MAX) { w = w * (MAX / h); h = MAX; } }
+      socket.emit('addTokenFromLibrary', { imageUrl: file.url, mediaType: 'image', width: Math.round(w), height: Math.round(h) });
+      flashCard(card);
+    };
+    img.onerror = () => setStatus('Could not load image.', 'tomato');
+    img.src = file.url;
+  }
+
+  // ── New folder ───────────────────────────────────────────
+  document.getElementById('new-folder-btn').addEventListener('click', () => {
+    const name = prompt('Folder name:');
+    if (!name || !name.trim()) return;
+    fetch('/mediaFolder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) { setStatus('Folder created!', '#4CAF50'); reload(); }
+        else setStatus(d.error || 'Error', 'tomato');
+      });
+  });
+
+  // ── Upload ───────────────────────────────────────────────
+  document.getElementById('upload-btn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => uploadFiles(fileInput.files));
+
+  // Drop zones
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+  });
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  gridArea.addEventListener('dragover', e => {
+    e.preventDefault();
+    gridArea.classList.add('dragover');
+  });
+  gridArea.addEventListener('dragleave', e => {
+    if (!gridArea.contains(e.relatedTarget)) gridArea.classList.remove('dragover');
+  });
+  gridArea.addEventListener('drop', e => {
+    e.preventDefault();
+    gridArea.classList.remove('dragover');
+    if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+  });
+
+  function uploadFiles(files) {
+    if (!files || files.length === 0) return;
+    const folder = (activeFolder === '__all__' || activeFolder === '__root__') ? '' : activeFolder;
+    const fd = new FormData();
+    Array.from(files).forEach(f => fd.append('files', f));
+    const url = '/mediaUpload' + (folder ? `?folder=${encodeURIComponent(folder)}` : '');
+
+    uploadBar.style.display = 'block';
+    uploadFill.style.width = '0%';
+    setStatus(`Uploading ${files.length} file(s)…`, '#aaa');
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable)
+        uploadFill.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+    });
+    xhr.addEventListener('load', () => {
+      uploadFill.style.width = '100%';
+      setTimeout(() => { uploadBar.style.display = 'none'; uploadFill.style.width = '0%'; }, 600);
+      fileInput.value = '';
+      setStatus(`Uploaded!`, '#4CAF50');
+      reload();
+    });
+    xhr.addEventListener('error', () => setStatus('Upload failed.', 'tomato'));
+    xhr.send(fd);
+  }
+
+  // ── Rename folder ────────────────────────────────────────
+  function renameFolder(oldName) {
+    const newName = prompt('New folder name:', oldName);
+    if (!newName || !newName.trim() || newName.trim() === oldName) return;
+    fetch('/mediaFolder', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldName, newName: newName.trim() }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          if (activeFolder === oldName) activeFolder = newName.trim();
+          setStatus('Folder renamed.', '#4CAF50');
+          reload();
+        } else setStatus(d.error || 'Error', 'tomato');
+      });
+  }
+
+  // ── Delete folder ─────────────────────────────────────────
+  function deleteFolder(name) {
+    const folder = allData.folders.find(f => f.name === name);
+    const count  = folder ? folder.files.length : 0;
+    const msg    = count > 0
+      ? `Delete folder "${name}" and all ${count} file(s) inside? This cannot be undone.`
+      : `Delete empty folder "${name}"?`;
+    if (!confirm(msg)) return;
+    fetch('/mediaFolder', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          if (activeFolder === name) activeFolder = '__all__';
+          setStatus('Folder deleted.', '#aaa');
+          reload();
+        } else setStatus(d.error || 'Error', 'tomato');
+      });
+  }
+
+  // ── Delete file ──────────────────────────────────────────
+  function deleteFile(file) {
+    if (!confirm(`Delete "${file.name}"? This cannot be undone.`)) return;
+    fetch('/mediaFile', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: file.url }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) { setStatus('File deleted.', '#aaa'); reload(); }
+        else setStatus(d.error || 'Error', 'tomato');
+      });
+  }
+
+  // ── Helpers ──────────────────────────────────────────────
+  function flashCard(card) {
+    card.classList.add('adding');
+    setStatus('Added to scene!', '#4CAF50');
+    setTimeout(() => { card.classList.remove('adding'); setStatus('Double-click to add to scene', ''); }, 1000);
+  }
+
+  function setStatus(msg, color) {
+    statusEl.textContent = msg;
+    statusEl.style.color = color || '#5c8aff';
+  }
+
+  searchEl.addEventListener('input', () => renderGrid(getFiles(activeFolder)));
+})();
+</script>
+</body>
+</html>

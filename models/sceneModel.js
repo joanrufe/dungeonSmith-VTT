@@ -98,6 +98,8 @@ class SceneModel {
       // Delete unused images
       for (const token of scene.tokens) {
         const imageUrl = token.imageUrl;
+        // Skip data: URLs (paint tiles) and library files (never auto-delete those)
+        if (!imageUrl || imageUrl.startsWith('data:') || imageUrl.startsWith('/media/')) continue;
         const isUsedElsewhere = await this.isImageUsedElsewhere(imageUrl);
         if (!isUsedElsewhere) {
           const imagePath = path.join(__dirname, '..', 'public', imageUrl);
@@ -176,13 +178,14 @@ class SceneModel {
 
         const isUsedElsewhere = await this.isImageUsedElsewhere(imageUrl);
 
-        if (!isUsedElsewhere) {
+        // Skip file deletion for paint tiles and library media files
+        if (!isUsedElsewhere && imageUrl && !imageUrl.startsWith('data:') && !imageUrl.startsWith('/media/')) {
           const imagePath = path.join(__dirname, '..', 'public', imageUrl);
           try {
             await fs.unlink(imagePath);
             console.log('Deleted unused image file:', imagePath);
           } catch (err) {
-            console.error('Error deleting image file:', err);
+            // File may already be gone – not critical
           }
         }
 

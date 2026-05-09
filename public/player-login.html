@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Player Login</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/dm.css">
+  <style>
+    body {
+      background-color: #1e1e1e;
+      color: #f0f0f0;
+      font-family: Arial, sans-serif;
+    }
+
+    #login-container {
+      width: 400px;
+      margin: 100px auto;
+      padding: 30px;
+      background-color: #2e2e2e;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+      text-align: center;
+    }
+
+    #login-container h1 {
+      margin-bottom: 20px;
+    }
+
+    #login-container p {
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #ccc;
+    }
+
+    #login-container form {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #login-container label {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    #login-container input[type="password"] {
+      width: 80%;
+      padding: 10px;
+      margin-bottom: 20px;
+      border: none;
+      border-radius: 4px;
+    }
+
+    #login-container button {
+      padding: 10px 20px;
+      background-color: #4caf50;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #login-container button:hover {
+      background-color: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <div id="login-container">
+    <img src="/MiniVTT_Logo_Player.png" alt="Mini VTT Logo" style="width: 100px; margin-bottom: 20px;">
+    <h1>Player Login</h1>
+    <p>Ask the DM for the player password. It is stored on the server in <code>secret.txt</code>.</p>
+    <form method="POST" action="/player-login">
+      <label for="password">Enter Player Password:</label>
+      <input type="password" name="password" id="password" required autofocus placeholder="Password">
+      <button type="submit">Login</button>
+    </form>
+  </div>
+</body>
+</html>

@@ -55,6 +55,28 @@ exports.deleteScene = async (req, res) => {
   }
 };
 
+// Function to duplicate a scene
+exports.duplicateScene = async (req, res) => {
+  const { sceneId, sceneName } = req.body;
+  try {
+    const source = await Scene.loadScene(sceneId);
+    if (!source) return res.status(404).json({ error: 'Scene not found' });
+
+    const newSceneId = Date.now().toString();
+    const newScene = JSON.parse(JSON.stringify(source)); // deep clone
+    newScene.sceneId = newSceneId;
+    newScene.sceneName = sceneName || `Copy of ${source.sceneName}`;
+
+    await Scene.saveScene(newScene);
+    Scene.addScene(newScene);
+
+    res.json({ sceneId: newSceneId });
+  } catch (err) {
+    console.error('Error duplicating scene:', err);
+    res.status(500).json({ error: 'Error duplicating scene.' });
+  }
+};
+
 // Function to update scene order
 exports.updateSceneOrder = async (req, res) => {
   const { sceneOrder } = req.body;

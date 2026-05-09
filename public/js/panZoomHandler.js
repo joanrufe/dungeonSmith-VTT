@@ -86,4 +86,12 @@ export class PanZoomHandler {
       event.preventDefault();
     }
   }
+
+  /** Apply a view state (e.g. from DM snap-to-view). */
+  applyView(scale, offsetX, offsetY) {
+    this.sceneRenderer.scale   = scale;
+    this.sceneRenderer.offsetX = offsetX;
+    this.sceneRenderer.offsetY = offsetY;
+    this.sceneRenderer.updateAllTokenElements();
+  }
 }

@@ -3,8 +3,12 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Mini VTT</title>
+  <title>DND VTT – Player</title>
   <link rel="icon" type="image/x-icon" href="./MiniVTT_Logo_Player.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <audio id="background-music" style="display: none;"></audio>
@@ -15,15 +19,136 @@
   <!-- Audio Enable Overlay -->
   <div id="audio-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(30,30,30,0.85); display: flex; justify-content: center; align-items: center; z-index: 1000;">
     <button id="enable-audio-button" style="padding: 20px 40px; font-size: 18px; background-color: #007bff; color: #fff; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center;">
-      <!-- Audio Icon -->
       <span style="font-size: 24px; margin-right: 10px;">🔊</span>
       Click to Enable Audio
     </button>
   </div>
 
-  <div id="scene-container"></div>
-  <script type="module" src="/js/player.js"></script>
-</body>
+  <!-- Player help button (top-right) -->
+  <button id="player-help-btn" title="Controls"><i class="fa-solid fa-circle-question"></i></button>
+  <button id="ruler-toggle-btn" class="player-ruler-btn" title="Measure distance"><i class="fa-solid fa-ruler"></i></button>
 
+  <!-- Player help modal -->
+  <div id="player-help-modal" class="player-help-modal hidden">
+    <div class="player-help-content">
+      <span class="player-help-close">&times;</span>
+      <h2><i class="fa-solid fa-gamepad"></i> Player Controls</h2>
+      <table class="help-table">
+        <tr><th colspan="2">Scene</th></tr>
+        <tr><td><kbd>Scroll</kbd></td><td>Zoom in / out</td></tr>
+        <tr><td><kbd>Right-click drag</kbd></td><td>Pan the scene</td></tr>
+        <tr><th colspan="2">Tokens</th></tr>
+        <tr><td><kbd>Drag</kbd></td><td>Move your token (if allowed by DM)</td></tr>
+        <tr><th colspan="2">Communication</th></tr>
+        <tr><td><kbd>Double Click</kbd></td><td>Ping the scene (blue indicator)</td></tr>
+        <tr><td><kbd>Ruler</kbd></td><td>Measure distance at 5 ft per grid cell</td></tr>
+        <tr><th colspan="2">Initiative</th></tr>
+        <tr><td><kbd>Right arrow tab</kbd></td><td>Collapse / expand the initiative sidebar</td></tr>
+        <tr><th colspan="2">Turn Announcement</th></tr>
+        <tr><td>Center screen flash</td><td>A name appears when it's someone's turn</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div id="scene-container"></div>
+
+  <!-- Collapsible initiative sidebar -->
+  <div id="player-init-wrapper">
+    <div id="player-init-sidebar"></div>
+    <button id="player-init-collapse-btn" title="Collapse/expand initiative">&#x276E;</button>
+  </div>
+
+  <!-- Dice Roller Toggle Button -->
+  <button id="dice-toggle-btn" title="Toggle Dice Roller"
+    style="position:fixed; top:10px; right:50px; z-index:1001;
+           background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+           color:white; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:13px;">
+    <i class="fa-solid fa-dice-d20"></i> Dice
+  </button>
+
+  <!-- 3D Dice Roller Panel -->
+  <div id="dice-panel" class="draggable-panel panel-hidden">
+    <div class="panel-drag-handle">
+      <span><i class="fa-solid fa-dice-d20"></i> DICE ROLLER</span>
+      <span class="drag-hint">☰</span>
+    </div>
+    <div id="dice-status" style="font-size:10px;color:#aaa;text-align:center;margin-bottom:8px;">Loading...</div>
+    <div class="dice-controls">
+      <button class="dice-btn" data-dice="1d4">1d4</button>
+      <button class="dice-btn" data-dice="1d6">1d6</button>
+      <button class="dice-btn" data-dice="1d8">1d8</button>
+      <button class="dice-btn" data-dice="1d10">1d10</button>
+      <button class="dice-btn" data-dice="1d12">1d12</button>
+      <button class="dice-btn" data-dice="1d20">1d20</button>
+      <button class="dice-btn" data-dice="1d100">d100</button>
+      <button class="dice-btn dice-clear-btn" data-dice="clear">Clear All</button>
+    </div>
+    <div class="dice-custom-row" style="display:flex;gap:4px;margin-top:8px;">
+      <input type="text" id="dice-custom-input" placeholder="e.g. 2d6"
+        style="flex:1;background:#1a1a2a;border:1px solid #555;border-radius:4px;color:white;padding:4px;font-size:11px;">
+      <button id="dice-custom-roll-btn"
+        style="background:#5c8aff;border:none;border-radius:4px;color:white;padding:4px 8px;cursor:pointer;font-size:11px;">Roll</button>
+    </div>
+    <div class="dice-config-row">
+      <label class="dice-config-item">
+        <span>Silent Roll</span>
+        <input type="checkbox" id="dice-silent-check">
+      </label>
+      <label class="dice-config-item">
+        <span>Color</span>
+        <select id="dice-colorset-select">
+          <option value="white">White (default)</option>
+          <optgroup label="D&amp;D Damage Types">
+            <option value="fire">Fire</option>
+            <option value="ice">Ice</option>
+            <option value="poison">Poison</option>
+            <option value="acid">Acid</option>
+            <option value="thunder">Thunder</option>
+            <option value="lightning">Lightning</option>
+            <option value="water">Water</option>
+            <option value="earth">Earth</option>
+            <option value="force">Force</option>
+            <option value="psychic">Psychic</option>
+            <option value="necrotic">Necrotic</option>
+            <option value="radiant">Radiant</option>
+          </optgroup>
+          <optgroup label="Styles">
+            <option value="black">Black</option>
+            <option value="bronze">Thylean Bronze</option>
+            <option value="astralsea">Astral Sea</option>
+            <option value="glitterparty">Glitter Party</option>
+            <option value="bloodmoon">Blood Moon</option>
+            <option value="starynight">Starry Night</option>
+            <option value="pinkdreams">Pink Dreams</option>
+            <option value="breebaby">Pastel Sunset</option>
+            <option value="rainbow">Rainblow</option>
+            <option value="inspired">Inspired</option>
+          </optgroup>
+          <optgroup label="Nature">
+            <option value="dragons">Here be Dragons</option>
+            <option value="birdup">Bird Up</option>
+            <option value="tigerking">Tiger King</option>
+          </optgroup>
+        </select>
+      </label>
+    </div>
+    <div id="dice-result-log"></div>
+  </div>
+  <div id="dice-box-container"></div>
+
+  <!-- Flourish overlay -->
+  <div id="player-flourish" class="hidden">
+    <h1 id="player-flourish-name"></h1>
+  </div>
+
+  <script src="/js/gridRenderer.js"></script>
+  <script type="module" src="/js/player.js"></script>
+  <script src="/js/calloutConfig.js"></script>
+  <script src="/js/playerInitiative.js"></script>
+  <script src="/js/tokenTool.js"></script>
+  <script src="/js/rulerTool.js"></script>
+  <script src="/js/playerControls.js"></script>
+  <script type="module" src="/js/diceRoller.js"></script>
+</body>
 
 </html>

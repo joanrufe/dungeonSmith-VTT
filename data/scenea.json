@@ -1,0 +1,9 @@
+{
+  "objects": {
+    "version": "5.3.0",
+    "objects": []
+  },
+  "filter": "fire",
+  "gridSize": 50,
+  "showGrid": true
+}

@@ -10,6 +10,7 @@ export class SceneManager {
     this.sceneContainer = sceneContainer;
     this.currentScene = null;
     this.selectedTokenId = null;
+    this.selectedTokenIds = new Set();
     this.sortableInitialized = false;
 
     this.init();
@@ -29,6 +30,18 @@ export class SceneManager {
 
     this.socket.on('sceneData', (scene) => this.onSceneData(scene));
 
+    this.socket.on('addToken', ({ sceneId, token }) => {
+      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
+      // Skip if we already have this token (locally created via drag-drop upload)
+      if (this.currentScene.tokens.find(t => t.tokenId === token.tokenId)) return;
+      this.currentScene.tokens.push(token);
+      this.sceneRenderer.tokens.push(token);
+      this.sceneRenderer.renderToken(token);
+      this.tokenManager.setupTokenInteractions(token);
+      const element = document.getElementById(`token-${token.tokenId}`);
+      if (element) element.addEventListener('click', (e) => this.onTokenClick(e, token.tokenId));
+    });
+
     this.socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
       this.onUpdateToken(sceneId, tokenId, properties);
     });
@@ -41,6 +54,10 @@ export class SceneManager {
       this.onSceneDeleted(sceneId);
     });
 
+    this.socket.on('pingScene', (data) => {
+      this.drawPing(data);
+    });
+
     // Add other socket event handlers as needed
   }
 
@@ -51,6 +68,9 @@ export class SceneManager {
 
     // Unselect token when clicking on the scene background
     this.sceneContainer.addEventListener('click', (event) => this.onSceneClick(event));
+
+    // Double-click to ping
+    this.sceneContainer.addEventListener('dblclick', (event) => this.onSceneDblClick(event));
   }
 
   setupKeyListeners() {
@@ -124,8 +144,14 @@ export class SceneManager {
   }
 
   onSceneButtonClick(scene) {
-    // Notify the server to change the active scene
-    this.socket.emit('changeScene', { sceneId: scene.sceneId });
+    const followPlayers = document.getElementById('follow-players-toggle')?.checked !== false;
+    window.VTT_FOLLOW_PLAYERS = followPlayers;
+
+    if (followPlayers) {
+      // Notify the server to change the active scene for players.
+      this.socket.emit('changeScene', { sceneId: scene.sceneId });
+    }
+
     // Load the selected scene
     this.loadScene(scene.sceneId);
 
@@ -144,6 +170,7 @@ export class SceneManager {
 
   onSceneData(scene) {
     this.currentScene = scene;
+    this.clearSelection();
     this.renderScene(scene);
 
     // Update active scene button
@@ -177,53 +204,97 @@ export class SceneManager {
   onTokenClick(event, tokenId) {
     event.stopPropagation(); // Prevent click from bubbling up to sceneContainer
 
-    // Unselect previous token
-    if (this.selectedTokenId && this.selectedTokenId !== tokenId) {
-      const prevSelectedElement = document.getElementById(`token-${this.selectedTokenId}`);
-      if (prevSelectedElement) {
-        prevSelectedElement.style.boxShadow = '';
+    if (event.shiftKey) {
+      if (this.selectedTokenIds.has(tokenId)) {
+        this.selectedTokenIds.delete(tokenId);
+      } else {
+        this.selectedTokenIds.add(tokenId);
       }
+      this.selectedTokenId = this.selectedTokenIds.size ? Array.from(this.selectedTokenIds).at(-1) : null;
+      this.refreshSelectionStyles();
+      return;
     }
 
-    // Set the new selected token
+    this.selectedTokenIds.clear();
+    this.selectedTokenIds.add(tokenId);
     this.selectedTokenId = tokenId;
-    const element = event.currentTarget;
-    element.style.boxShadow = '0px 0px 10px 3px #222222';
+    this.refreshSelectionStyles();
   }
 
   onSceneClick(event) {
     // If clicked directly on the sceneContainer (not on any token)
     if (event.target === this.sceneContainer) {
-      if (this.selectedTokenId) {
-        const prevSelectedElement = document.getElementById(`token-${this.selectedTokenId}`);
-        if (prevSelectedElement) {
-          prevSelectedElement.style.boxShadow = '';
-        }
-        this.selectedTokenId = null;
-      }
+      this.clearSelection();
     }
   }
 
+  onSceneDblClick(event) {
+    if (event.target !== this.sceneContainer && event.target.id !== 'scene-bg-el' && event.target.id !== 'player-grid-canvas' && event.target.id !== 'paint-grid-canvas') {
+      return; // Only ping on the background, not UI or tokens
+    }
+
+    const rect = this.sceneContainer.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    // Convert screen coordinates to world coordinates
+    const worldX = (mouseX / this.sceneRenderer.scale) - this.sceneRenderer.offsetX;
+    const worldY = (mouseY / this.sceneRenderer.scale) - this.sceneRenderer.offsetY;
+
+    // Default to blue for players, green for DM
+    const color = (window.VTT_DM && !window.VTT_PLAYER) ? '#00FF00' : '#00AAFF';
+
+    const data = { x: worldX, y: worldY, color };
+    this.socket.emit('pingScene', data);
+    this.drawPing(data); // Draw locally
+  }
+
+  drawPing(data) {
+    const pingEl = document.createElement('div');
+    pingEl.className = 'scene-ping';
+    pingEl.style.position = 'absolute';
+    // Calculate current screen bounds for this ping's absolute world position
+    const px = (data.x + this.sceneRenderer.offsetX) * this.sceneRenderer.scale;
+    const py = (data.y + this.sceneRenderer.offsetY) * this.sceneRenderer.scale;
+    pingEl.style.left = `${px}px`;
+    pingEl.style.top = `${py}px`;
+    pingEl.style.transform = 'translate(-50%, -50%)';
+    pingEl.style.borderColor = data.color;
+    
+    // Parse hex to rgba for background
+    const isGreen = data.color === '#00FF00';
+    pingEl.style.backgroundColor = isGreen ? 'rgba(0, 255, 0, 0.4)' : 'rgba(0, 170, 255, 0.4)';
+
+    this.sceneContainer.appendChild(pingEl);
+
+    setTimeout(() => {
+      if (pingEl.parentNode) pingEl.remove();
+    }, 1000);
+  }
+
   onKeyDown(event) {
-    if (this.selectedTokenId && event.key === ']') {
-      this.moveTokenZIndexUp(this.selectedTokenId);
-    } else if (this.selectedTokenId && event.key === '[') {
-      this.moveTokenZIndexDown(this.selectedTokenId);
-    } else if (this.selectedTokenId && event.key.toLowerCase() === 'h') {
-      this.toggleTokenHiddenState(this.selectedTokenId);
-    } else if (this.selectedTokenId && event.key === 'Delete') {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (this.hasSelection() && event.key === ']') {
+      this.forEachSelectedTokenId(tokenId => this.moveTokenZIndexUp(tokenId));
+    } else if (this.hasSelection() && event.key === '[') {
+      this.forEachSelectedTokenId(tokenId => this.moveTokenZIndexDown(tokenId));
+    } else if (this.hasSelection() && event.key.toLowerCase() === 'h') {
+      this.forEachSelectedTokenId(tokenId => this.toggleTokenHiddenState(tokenId));
+    } else if (this.hasSelection() && event.key === 'Delete') {
       this.deleteSelectedToken();
-    } else if (this.selectedTokenId && event.ctrlKey && event.key.toLowerCase() === 'd') {
+    } else if (this.hasSelection() && event.ctrlKey && event.key.toLowerCase() === 'd') {
       // Duplicate the selected token
       event.preventDefault(); // Prevent default browser action
       this.duplicateSelectedToken();
-    } else if (this.selectedTokenId && event.key.toLowerCase() === 'i') {
-      this.toggleTokenMovableByPlayers(this.selectedTokenId);
+    } else if (this.hasSelection() && event.key.toLowerCase() === 'i') {
+      this.forEachSelectedTokenId(tokenId => this.toggleTokenMovableByPlayers(tokenId));
+    } else if (this.hasSelection() && event.key.toLowerCase() === 'q') {
+      this.rotateSelectedTokens(event.shiftKey ? -5 : -15);
+    } else if (this.hasSelection() && event.key.toLowerCase() === 'e') {
+      this.rotateSelectedTokens(event.shiftKey ? 5 : 15);
     } else if (event.key.toLowerCase() === 't') {
       this.toggleToolbar();
-    } else if (event.key.toLowerCase() === 'm') {
-      const musicPanel = document.getElementById('music-panel');
-      musicPanel.classList.toggle('hidden');
     } else if (event.shiftKey && event.key.toLowerCase() === 'd') {
       // Shift + D pressed: Prompt to delete the current scene
       if (this.currentScene) {
@@ -236,6 +307,40 @@ export class SceneManager {
         alert('No scene is currently loaded.');
       }
     }
+  }
+
+  hasSelection() {
+    return this.selectedTokenIds && this.selectedTokenIds.size > 0;
+  }
+
+  getSelectedTokenIds() {
+    if (this.selectedTokenIds && this.selectedTokenIds.size) {
+      return Array.from(this.selectedTokenIds);
+    }
+    return this.selectedTokenId ? [this.selectedTokenId] : [];
+  }
+
+  forEachSelectedTokenId(callback) {
+    this.getSelectedTokenIds().forEach(callback);
+  }
+
+  clearSelection() {
+    this.selectedTokenIds.clear();
+    this.selectedTokenId = null;
+    this.refreshSelectionStyles();
+  }
+
+  refreshSelectionStyles() {
+    document.querySelectorAll('.token').forEach(element => {
+      const tokenId = element.dataset.tokenId;
+      if (this.selectedTokenIds.has(tokenId)) {
+        element.style.boxShadow = '0px 0px 0px 3px #00FFFF, 0px 0px 15px 5px rgba(0,255,255,0.6)';
+        element.style.borderRadius = '5px';
+      } else if (!element.classList.contains('paint-tile-el')) {
+        element.style.boxShadow = 'none';
+        element.style.borderRadius = '';
+      }
+    });
   }
 
   toggleTokenHiddenState(tokenId) {
@@ -264,8 +369,12 @@ export class SceneManager {
   }
 
   duplicateSelectedToken() {
-    const originalToken = this.currentScene.tokens.find((t) => t.tokenId === this.selectedTokenId);
-    if (originalToken) {
+    const selectedIds = this.getSelectedTokenIds();
+    if (selectedIds.length) {
+      const newSelection = [];
+      selectedIds.forEach((tokenId) => {
+        const originalToken = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
+        if (!originalToken) return;
       // Clone the original token
       const newToken = JSON.parse(JSON.stringify(originalToken));
   
@@ -295,19 +404,12 @@ export class SceneManager {
       if (element) {
         element.addEventListener('click', (event) => this.onTokenClick(event, newToken.tokenId));
       }
-  
-      // Optionally, select the new token
-      // Unselect previous token
-      if (this.selectedTokenId) {
-        const prevSelectedElement = document.getElementById(`token-${this.selectedTokenId}`);
-        if (prevSelectedElement) {
-          prevSelectedElement.style.boxShadow = '';
-        }
-      }
-      this.selectedTokenId = newToken.tokenId;
-      if (element) {
-        element.style.boxShadow = '0px 0px 10px 3px #222222';
-      }
+        newSelection.push(newToken.tokenId);
+      });
+
+      this.selectedTokenIds = new Set(newSelection);
+      this.selectedTokenId = newSelection.at(-1) || null;
+      this.refreshSelectionStyles();
     } else {
       alert('No token is currently selected.');
     }
@@ -393,25 +495,28 @@ export class SceneManager {
   }
 
   deleteSelectedToken() {
-    // Remove the selected token
-    const tokenIndex = this.currentScene.tokens.findIndex((t) => t.tokenId === this.selectedTokenId);
+    const selectedIds = this.getSelectedTokenIds();
+    if (!selectedIds.length) return;
+
+    selectedIds.forEach((tokenId) => {
+    const tokenIndex = this.currentScene.tokens.findIndex((t) => t.tokenId === tokenId);
     if (tokenIndex !== -1) {
-      const token = this.currentScene.tokens[tokenIndex];
       // Remove from currentScene.tokens
       this.currentScene.tokens.splice(tokenIndex, 1);
       // Remove from DOM
-      const element = document.getElementById(`token-${this.selectedTokenId}`);
+      const element = document.getElementById(`token-${tokenId}`);
       if (element) {
         this.sceneContainer.removeChild(element);
       }
       // Notify server
       this.socket.emit('removeToken', {
         sceneId: this.currentScene.sceneId,
-        tokenId: this.selectedTokenId,
+        tokenId,
       });
-      // Clear selectedTokenId
-      this.selectedTokenId = null;
     }
+    });
+
+    this.clearSelection();
   }
 
   toggleTokenMovableByPlayers(tokenId) {
@@ -436,6 +541,21 @@ export class SceneManager {
         properties: { movableByPlayers: token.movableByPlayers },
       });
     }
+  }
+
+  rotateSelectedTokens(delta) {
+    this.forEachSelectedTokenId((tokenId) => {
+      const token = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
+      if (!token) return;
+      token.rotation = ((token.rotation || 0) + delta) % 360;
+      if (token.rotation < 0) token.rotation += 360;
+      this.sceneRenderer.updateTokenElement(token);
+      this.socket.emit('updateToken', {
+        sceneId: this.currentScene.sceneId,
+        tokenId,
+        properties: { rotation: token.rotation },
+      });
+    });
   }
 
   deleteCurrentScene() {
@@ -474,8 +594,10 @@ export class SceneManager {
       // Update the DOM element
       this.sceneRenderer.updateTokenElement(token);
 
-      // Update interactions
-      this.tokenManager.setupTokenInteractions(token);
+      // Only re-setup interactions when interaction-relevant props change
+      if ('movableByPlayers' in properties || 'hidden' in properties) {
+        this.tokenManager.setupTokenInteractions(token);
+      }
     }
   }
 
@@ -493,7 +615,9 @@ export class SceneManager {
       }
       // If the removed token was selected, unselect it
       if (this.selectedTokenId === tokenId) {
-        this.selectedTokenId = null;
+        this.selectedTokenIds.delete(tokenId);
+        this.selectedTokenId = this.selectedTokenIds.size ? Array.from(this.selectedTokenIds).at(-1) : null;
+        this.refreshSelectionStyles();
       }
     }
   }
@@ -700,6 +824,22 @@ export class SceneManager {
       })
       .catch((error) => {
         console.error('Error creating scene:', error);
+      });
+  }
+
+  duplicateScene(sceneId, sceneName) {
+    fetch('/duplicateScene', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sceneId, sceneName }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        this.fetchSceneList();
+        this.loadScene(data.sceneId);
+      })
+      .catch((error) => {
+        console.error('Error duplicating scene:', error);
       });
   }
 

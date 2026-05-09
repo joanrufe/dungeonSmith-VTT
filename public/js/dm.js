@@ -14,6 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const tokenManager = new TokenManager(sceneRenderer, socket, true); // true indicates DM
   const sceneManager = new SceneManager(socket, sceneRenderer, tokenManager, sceneContainer);
 
+  // Expose to non-module scripts (paint mode, initiative tracker)
+  window.VTT_DM = { socket, sceneManager };
+
   // Instantiate MusicManager
   const musicManager = new MusicManager(socket);
 
@@ -22,6 +25,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const sceneName = prompt('Enter a name for the new scene:');
     if (sceneName && sceneName.trim() !== '') {
       sceneManager.createScene(sceneName);
+    }
+  });
+
+  // Handle scene duplication
+  document.getElementById('duplicate-scene-button').addEventListener('click', () => {
+    if (!sceneManager.currentScene) {
+      alert('No scene is currently loaded.');
+      return;
+    }
+    const defaultName = `Copy of ${sceneManager.currentScene.sceneName}`;
+    const sceneName = prompt('Enter a name for the duplicated scene:', defaultName);
+    if (sceneName && sceneName.trim() !== '') {
+      sceneManager.duplicateScene(sceneManager.currentScene.sceneId, sceneName.trim());
     }
   });
 

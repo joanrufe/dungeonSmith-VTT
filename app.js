@@ -25,7 +25,13 @@ app.use(session({
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // For parsing form data
-app.use(express.static(path.join(__dirname, 'public')));
+app.use((req, res, next) => {
+  if (req.path === '/index.html') return res.redirect('/');
+  if (req.path === '/dm.html') return res.redirect('/dm');
+  if (req.path === '/files.html') return res.redirect('/files');
+  next();
+});
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // Routes
 const routes = require('./routes');

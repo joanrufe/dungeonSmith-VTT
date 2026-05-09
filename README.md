@@ -1,198 +1,211 @@
-![MiniVTT Banner](https://samsterjam.com/minivtt_banner.png)
+# SceneSmith VTT
 
-# MiniVTT
+A heavily expanded fork of [MiniVTT](https://github.com/SamsterJam/MiniVTT) for running lightweight tabletop RPG sessions with a faster DM workflow, richer scene tools, and real-time player sync.
 
-A lightweight web-based virtual tabletop for running tabletop RPG sessions. Built because I got tired of dealing with bloated VTTs that take forever to set up for simple encounters.
+SceneSmith VTT keeps the original "everything is a token" simplicity while adding a larger DM toolset: media organization, paint tools, initiative announcements, 3D dice, ruler mode, player-facing sync, music controls, and quality-of-life updates for running sessions quickly.
 
-Everything in MiniVTT is a token - your maps, character pieces, monsters, items, whatever. Drag and drop images or videos onto the canvas and you're good to go. The DM gets full control over what players can see and interact with, and everything syncs in real-time across all connected clients.
+Original project:  
+https://github.com/SamsterJam/MiniVTT
 
-The interface supports panning and zooming so players can focus on different parts of the scene. Scene switching is instant - click a scene in the DM panel and everyone transitions immediately. Most DM actions are either drag-and-drop or keyboard shortcuts to keep things fast.
-
-<p align="center">
-  <img src="https://github.com/SamsterJam/SamsterJam_Repo_Gifs/blob/main/minivtt_full_demo.webp?raw=true" alt="MiniVTT Demo Gif">
-</p>
-
----
-
-## Table of Contents
-
-1. [Features](#features)
-2. [To-Do](#to-do)
-3. [Showcase](#showcase)
-4. [Installation](#installation)
-5. [Usage](#usage)
-6. [Project Structure](#project-structure)
-7. [Built With](#built-with)
-8. [Security Disclaimer](#security-disclaimer)
+This project remains licensed under GPL-3.0.
 
 ---
 
 ## Features
 
-**Real-time sync** - Token movements, scene changes, and music playback stay synchronized across all connected clients (DM and players).
+### Original MiniVTT Foundation
 
-**Scene management** - Create and switch between multiple scenes. Reorder them in the sidebar. Everyone sees the active scene instantly when you switch.
+These are the core ideas and baseline capabilities inherited from MiniVTT:
 
-**Drag-and-drop everything** - Drop images or videos directly onto the canvas to create tokens. Drop audio files to add music tracks.
+**Real-time DM/player sync** - Connected DM and player clients stay synchronized through Socket.IO.
 
-**Token controls** - Move, resize, rotate, and layer tokens. Toggle visibility to hide things from players. Give players permission to move specific tokens. All controlled by keyboard shortcuts or mouse interactions.
+**Everything is a token** - Maps, characters, monsters, props, and videos can be placed on the canvas as movable scene objects.
 
-**Hidden tokens** - Keep tokens invisible to players until you're ready to reveal them. Good for surprises and fog of war.
+**Scene management** - Create and switch between scenes during play.
 
-**Music manager** - Upload and play background music. Volume controls sync across all clients.
+**Drag-and-drop canvas uploads** - Drop image or video files onto the VTT canvas to create scene tokens.
 
-**Pan and zoom** - Mouse wheel to zoom, middle-click to pan. Each player can navigate independently while viewing the same scene.
+**Token visibility and movement control** - Hide tokens from players and control whether players can interact with tokens.
 
-**Keyboard shortcuts** - Most common DM actions have hotkeys: hide tokens (H), toggle player movement (I), adjust z-index ([/]), duplicate (Ctrl+D), etc.
+**Pan and zoom** - Navigate the scene with mouse controls.
 
-<p align="center">
-  <img src="https://github.com/SamsterJam/SamsterJam_Repo_Gifs/blob/main/minivtt_scenebuild_demo.webp?raw=true" alt="MiniVTT Scene Building Demo Gif">
-</p>
+**Music support** - Upload and play music for connected clients.
 
----
+### Added In SceneSmith VTT
 
-## To-Do
+These are the major additions and expansions in this fork:
 
-- [ ] Security for websockets and overall application
-- [ ] Sortable music order in DM panel
-- [ ] Better documented hotkeys
-- [ ] Update/Improve DM interface & Multiselect
-- [ ] Token Rotation
-- [ ] Snap tokens to grid options
+**Expanded DM toolbar and floating panels** - DM tools live in draggable panels with a right-side tray for Initiative, Paint, Dice, and Music.
 
----
+**Media Library** - Organize reusable media in folders from `/files`. Upload images, videos, PDFs, and text documents. Images preview as thumbnails; videos/documents show file icons. Shift-click downloads files, and double-clicking images/videos adds them to the active scene.
 
-## Showcase
+**Main-area media drag upload** - Drop files directly into the media library grid area, not only the sidebar drop zone.
 
-**Live Synced Movement**
-<img src="https://github.com/SamsterJam/SamsterJam_Repo_Gifs/blob/main/minivtt_sync_demo.webp?raw=true" alt="Live Movement Demo">
+**Password management tab** - Change DM and player passwords from the Media Library password tab or by editing `secret.txt`.
 
-**DM Tools & Hidden Tokens**
-<img src="https://github.com/SamsterJam/SamsterJam_Repo_Gifs/blob/main/minivtt_dmtools_demo.webp?raw=true" alt="DM Tools Demo">
+**Improved token controls** - Duplicate, rotate, fine-rotate, change layer order, multi-select, and improved token drag behavior.
 
-**Music Manager**
-<img src="https://github.com/SamsterJam/SamsterJam_Repo_Gifs/blob/main/minivtt_music_demo.webp?raw=true" alt="Music Manager Demo">
+**Grid upgrades** - Square/hex grid toggle, adjustable grid size, player grid sync, show/hide controls, and snap-to-grid.
+
+**Cached grid rendering** - Square and hex grid drawing uses cached pattern tiles for faster redraws.
+
+**Ruler mode** - Toggleable ruler mode with a visible active indicator. It works over tokens without selecting or dragging them.
+
+**Paint system** - Paint terrain tiles directly onto the scene with adjustable brush size, custom colors, eraser, and layer controls.
+
+**Initiative tracker** - Track turn order, edit names/values inline, advance rounds, and announce active turns with readable center-screen callouts.
+
+**3D dice roller** - Roll common dice or custom expressions with shared results, color themes, silent roll mode, callout results, and auto-clear.
+
+**Snap View** - DM can push their current camera position and zoom to connected players.
+
+**Player-side controls** - Player help modal, initiative sidebar, ruler, dice panel, and independent pan/zoom behavior.
+
+**Build and run scripts** - Windows batch files for validation/setup and starting the server.
+
+**Git hygiene for local data** - Runtime media, uploads, music, scene data, secrets, and local tooling folders are ignored.
 
 ---
 
 ## Installation
 
-### Clone the Repository
-```sh
-git clone https://github.com/SamsterJam/MiniVTT.git
-cd MiniVTT
-```
+### Requirements
 
-### Install Dependencies
+- Node.js
+- npm
+
+### Setup
+
 ```sh
 npm install
 ```
 
-### Start the Server
+Or run:
+
+```bat
+Build_DND_VTT.bat
+```
+
+The build script validates the JavaScript and installs dependencies if needed. It does not copy or package your media folders.
+
+### Start
+
 ```sh
 npm start
 ```
 
-Server runs on port 3000 by default. Navigate to `http://localhost:3000` to get started.
+Or double-click:
 
-Share the URL with your players - one person connects as DM at `/dm`, everyone else connects as players at the root URL.
+```bat
+Run_DND_VTT.bat
+```
+
+Default URLs:
+
+- Player view: `http://localhost:3000`
+- DM view: `http://localhost:3000/dm`
+- Media library: `http://localhost:3000/files`
 
 ---
 
 ## Usage
 
 ### DM View
-Navigate to `http://your-host:3000/dm` to access the DM interface where you can manage scenes, tokens, and music.
+
+Open `/dm` to manage scenes, tokens, music, initiative, dice, paint tools, grid controls, and player view syncing.
 
 ### Player View
-Players connect to `http://your-host:3000` and get a simplified view that only shows what the DM reveals.
 
-### Creating Scenes
-Click "Create Scene" in the DM panel, give it a name, and select it from the sidebar to make it active.
+Players open `/` and see the active scene, visible tokens, initiative callouts, dice rolls, music, and pings.
 
-### Adding Tokens
-Drag and drop image or video files onto the canvas. Each file becomes a token you can manipulate.
+### Media Library
 
-### Token Controls (DM only)
-- Click to select a token
-- Drag with mouse or use arrow keys to move
-- `[` / `]` - Move token down/up in the layer order (z-index)
-- `H` - Hide token from players
-- `I` - Toggle whether players can move this token
-- `Delete` - Remove token
+Open `/files` to upload and organize files.
+
+- Double-click an image or video to add it to the active scene.
+- Shift-click any file to download it.
+- PDFs and text documents display as icons.
+- Use the Passwords tab to update DM/player passwords.
+
+### Common DM Shortcuts
+
+- `Delete` - Delete selected token
+- `H` - Hide/show selected token from players
+- `I` - Toggle whether players can move selected token
+- `[` / `]` - Move selected token down/up in layer order
 - `Ctrl+D` - Duplicate selected token
-
-### Adding Music
-Drag audio files into the music drop area or use the Music Manager panel. Playback and volume sync across all clients.
-
-### Other Shortcuts
+- `Q` / `E` - Rotate selected token
+- `Shift+Q` / `Shift+E` - Fine rotate selected token
 - `T` - Toggle DM toolbar
-- `M` - Toggle music panel
-- `Shift+D` - Delete current scene (with confirmation)
+- `Shift+D` - Delete current scene
+- `Double-click` canvas - Ping location
 
 ---
 
 ## Project Structure
 
-```
+```txt
 .
-├── app.js                  // Express setup
-├── controllers
-│   ├── musicController.js
-│   ├── sceneController.js
-│   └── uploadController.js
-├── data
-│   └── scenes             // Stored scene data
-├── middlewares
-│   ├── multerMusic.js     // Music upload handling
-│   └── multerUpload.js    // Token upload handling
-├── models
-│   └── sceneModel.js      // Scene data model
-├── public                 // Client-side files
-│   ├── css
-│   │   ├── dm.css
-│   │   └── styles.css
-│   ├── dm-login.html
-│   ├── dm.html            // DM interface
-│   ├── index.html         // Player interface
-│   ├── js
-│   │   ├── dm.js
-│   │   ├── musicManager.js
-│   │   ├── panZoomHandler.js
-│   │   ├── player.js
-│   │   ├── sceneManager.js
-│   │   ├── sceneRenderer.js
-│   │   ├── tokenManager.js
-│   │   └── utils.js
-│   ├── music              // Uploaded audio files
-│   └── uploads            // Uploaded token images/videos
+├── app.js
+├── server.js
 ├── routes.js
-├── server.js              // Server entry point
-└── socketHandler.js       // WebSocket event handling
+├── socketHandler.js
+├── controllers/
+├── middlewares/
+├── models/
+├── data/
+│   └── scenes/
+├── public/
+│   ├── css/
+│   ├── js/
+│   ├── dm.html
+│   ├── index.html
+│   ├── files.html
+│   ├── media/
+│   ├── music/
+│   └── uploads/
+├── Build_DND_VTT.bat
+├── Run_DND_VTT.bat
+└── secret.txt
 ```
+
+Runtime/user data folders are ignored by git:
+
+- `public/media/`
+- `public/music/`
+- `public/uploads/`
+- `data/scenes/`
+- `secret.txt`
 
 ---
 
 ## Built With
 
-- [Node.js](https://nodejs.org/) - Server runtime
-- [Express](https://expressjs.com/) - Web framework
-- [Socket.IO](https://socket.io/) - Real-time communication
-- [Interact.js](https://interactjs.io/) - Drag, drop, and resize
-- [SortableJS](https://github.com/SortableJS/Sortable) - Scene reordering
-- [Multer](https://github.com/expressjs/multer) - File upload handling
+- Node.js
+- Express
+- Socket.IO
+- Interact.js
+- SortableJS
+- Multer
+- Font Awesome
+- 3D Dice / Dice Box
 
 ---
 
 ## Security Disclaimer
 
-This is an experimental project and hasn't been security audited. If you're running it on anything other than a trusted local network, you should know:
+SceneSmith VTT is intended for trusted local games and private networks.
 
-- WebSocket connections are not secured by default
-- There's no authentication beyond the DM/player split
-- File uploads aren't validated beyond basic type checking
-- Anyone with network access can potentially connect
-
-Only run this with people you trust, preferably on a local network. If you need to expose it to the internet, put it behind proper authentication and use HTTPS/WSS.
+It has not been security audited. File uploads, password handling, and WebSocket access are designed for convenience, not hardened public hosting. If you expose it to the internet, put it behind proper authentication, HTTPS/WSS, and a trusted reverse proxy.
 
 Use at your own risk.
+
+---
+
+## License
+
+SceneSmith VTT is a fork of MiniVTT by SamsterJam:
+
+https://github.com/SamsterJam/MiniVTT
+
+This project remains licensed under GPL-3.0.
