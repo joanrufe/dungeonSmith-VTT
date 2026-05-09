@@ -69,7 +69,7 @@ These are the major additions and expansions in this fork:
 
 **Empty state screens** - When no scene is loaded the DM sees the SceneSmith logo and "Pick a Scene". Players see the logo and "Please Wait" until the DM loads a scene.
 
-**Effects tool** - Spawn transparent area-effect overlays directly on the canvas as standard tokens. Choose from Square, Circle, Cone, or Line shapes. Twelve quick-select damage-type colors (Fire, Ice, Lightning, Acid, Poison, Thunder, Necrotic, Radiant, Force, Psychic, Fog, Darkness) plus a custom color picker. Size slider runs from 5 ft to 100 ft in 5 ft steps. Enable Breathing to animate the fill opacity in a slow pulse using SVG SMIL animation. Effects spawn centered on the viewport at a z-index above all other tokens and can be moved, scaled, and rotated like any token.
+**Effects tool** - Spawn transparent area-effect overlays directly on the canvas as standard tokens. Choose from Square, Circle, Cone, or Line shapes. Twelve quick-select damage-type colors (Fire, Ice, Lightning, Acid, Poison, Thunder, Necrotic, Radiant, Force, Psychic, Fog, Darkness) plus a custom color picker. Size slider runs from 5 ft to 100 ft in 5 ft steps. Enable Breathing to animate the fill opacity in a slow pulse using SVG SMIL animation. Effects spawn centered on the viewport at a z-index above all other tokens and can be moved, scaled, and rotated like any token. Clicking an effect that sits over an interactive token selects the token beneath instead.
 
 ---
 
@@ -77,36 +77,35 @@ These are the major additions and expansions in this fork:
 
 ### Requirements
 
-- Node.js
-- npm
+- Python 3.8 or newer
 
 ### Setup
 
+Double-click `Run_DND_VTT.bat` — it creates a virtual environment and installs dependencies automatically on first run.
+
+To install manually:
+
 ```sh
-npm install
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
-
-Or run:
-
-```bat
-Build_DND_VTT.bat
-```
-
-The build script validates the JavaScript and installs dependencies if needed. It does not copy or package your media folders.
 
 ### Start
 
-```sh
-npm start
-```
-
-Or double-click:
+Double-click:
 
 ```bat
 Run_DND_VTT.bat
 ```
 
-The run script asks which port to use. Press Enter for `3000`.
+Or run directly:
+
+```sh
+python app.py
+```
+
+The server starts on port `3000` by default.
 
 Default URLs:
 
@@ -185,13 +184,8 @@ For both:
 
 ```txt
 .
-├── app.js
-├── server.js
-├── routes.js
-├── socketHandler.js
-├── controllers/
-├── middlewares/
-├── models/
+├── app.py
+├── requirements.txt
 ├── data/
 │   └── scenes/
 ├── public/
@@ -205,7 +199,6 @@ For both:
 │   ├── media/
 │   ├── music/
 │   └── uploads/
-├── Build_DND_VTT.bat
 ├── Run_DND_VTT.bat
 └── data/private/secrets.txt
 ```
@@ -222,11 +215,12 @@ Runtime/user data folders are ignored by git:
 
 ## Built With
 
-- Node.js
-- Express
-- Socket.IO
+- Python 3
+- Flask
+- Flask-SocketIO
+- Werkzeug
+- Socket.IO (client)
 - Interact.js
-- Multer
 - Font Awesome
 - Dice Box (Three.js renderer)
 

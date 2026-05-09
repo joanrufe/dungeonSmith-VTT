@@ -32,16 +32,31 @@
       const ctx = getContext();
       if (!ctx || !ctx.scene) return;
 
-      const tokenId = tokenEl.dataset.tokenId;
-      const token   = ctx.scene.tokens.find(t => t.tokenId === tokenId);
+      let token = ctx.scene.tokens.find(t => t.tokenId === tokenEl.dataset.tokenId);
       if (!token) return;
+
+      // Click-through: if this is an area effect, look for an interactive token below
+      let activeEl = tokenEl;
+      if (token.isAreaEffect) {
+        const allAtPoint = document.elementsFromPoint(e.clientX, e.clientY);
+        for (const el of allAtPoint) {
+          if (el === tokenEl) continue;
+          if (!el.classList.contains('token') || el.classList.contains('paint-tile-el')) continue;
+          const candidate = ctx.scene.tokens.find(t => t.tokenId === el.dataset.tokenId);
+          if (!candidate || candidate.isAreaEffect) continue;
+          if (!ctx.isDM && !candidate.movableByPlayers) continue;
+          activeEl = el;
+          token = candidate;
+          break;
+        }
+      }
 
       // Players can only move tokens explicitly allowed by the DM
       if (!ctx.isDM && !token.movableByPlayers) return;
 
       // Leave resize margin (interact.js uses 6px) for the DM only
       if (ctx.isDM) {
-        const rect   = tokenEl.getBoundingClientRect();
+        const rect   = activeEl.getBoundingClientRect();
         const margin = 8;
         const nearEdge = e.clientX - rect.left   < margin ||
                          rect.right  - e.clientX < margin ||
@@ -57,16 +72,16 @@
       const startX    = e.clientX;
       const startY    = e.clientY;
       const selectedIds = ctx.isDM && ctx.vtt.sceneManager && ctx.vtt.sceneManager.selectedTokenIds &&
-        ctx.vtt.sceneManager.selectedTokenIds.has(tokenId)
+        ctx.vtt.sceneManager.selectedTokenIds.has(token.tokenId)
         ? Array.from(ctx.vtt.sceneManager.selectedTokenIds)
-        : [tokenId];
+        : [token.tokenId];
       const movingTokens = selectedIds
         .map(id => ctx.scene.tokens.find(t => t.tokenId === id))
         .filter(Boolean);
       const startPositions = new Map(movingTokens.map(t => [t.tokenId, { x: t.x, y: t.y }]));
 
-      tokenEl.setPointerCapture(e.pointerId);
-      tokenEl.style.cursor = 'grabbing';
+      activeEl.setPointerCapture(e.pointerId);
+      activeEl.style.cursor = 'grabbing';
 
       function onMove(ev) {
         const dx = (ev.clientX - startX) / renderer.scale;
@@ -113,16 +128,16 @@
       }
 
       function onUp(ev) {
-        tokenEl.releasePointerCapture(ev.pointerId);
-        tokenEl.style.cursor = '';
-        tokenEl.removeEventListener('pointermove',   onMove);
-        tokenEl.removeEventListener('pointerup',     onUp);
-        tokenEl.removeEventListener('pointercancel', onUp);
+        activeEl.releasePointerCapture(ev.pointerId);
+        activeEl.style.cursor = '';
+        activeEl.removeEventListener('pointermove',   onMove);
+        activeEl.removeEventListener('pointerup',     onUp);
+        activeEl.removeEventListener('pointercancel', onUp);
       }
 
-      tokenEl.addEventListener('pointermove',   onMove);
-      tokenEl.addEventListener('pointerup',     onUp);
-      tokenEl.addEventListener('pointercancel', onUp);
+      activeEl.addEventListener('pointermove',   onMove);
+      activeEl.addEventListener('pointerup',     onUp);
+      activeEl.addEventListener('pointercancel', onUp);
     });
 
     sc.addEventListener('contextmenu', (e) => {

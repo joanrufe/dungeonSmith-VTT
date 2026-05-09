@@ -36,6 +36,7 @@ export class SceneManager {
       if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
       // Skip if we already have this token (locally created via drag-drop upload)
       if (this.currentScene.tokens.find(t => t.tokenId === token.tokenId)) return;
+      token.sceneId = sceneId;
       this.currentScene.tokens.push(token);
       this.sceneRenderer.tokens.push(token);
       this.sceneRenderer.renderToken(token);
@@ -235,6 +236,7 @@ export class SceneManager {
 
   onSceneData(scene) {
     this.currentScene = scene;
+    scene.tokens.forEach(t => { t.sceneId = scene.sceneId; });
     this.clearSelection();
     this.renderScene(scene);
     this._renderPinnedButtons();
@@ -263,6 +265,20 @@ export class SceneManager {
 
   onTokenClick(event, tokenId) {
     event.stopPropagation(); // Prevent click from bubbling up to sceneContainer
+
+    // Click-through: if clicking an area effect, check for an interactive token below
+    const clickedToken = this.currentScene?.tokens.find(t => t.tokenId === tokenId);
+    if (clickedToken?.isAreaEffect) {
+      const allAtPoint = document.elementsFromPoint(event.clientX, event.clientY);
+      for (const el of allAtPoint) {
+        if (el.dataset.tokenId === tokenId) continue;
+        if (!el.classList.contains('token') || el.classList.contains('paint-tile-el')) continue;
+        const under = this.currentScene.tokens.find(t => t.tokenId === el.dataset.tokenId);
+        if (!under || under.isAreaEffect) continue;
+        tokenId = under.tokenId;
+        break;
+      }
+    }
 
     if (event.shiftKey) {
       if (this.selectedTokenIds.has(tokenId)) {

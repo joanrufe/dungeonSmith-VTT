@@ -1,5 +1,10 @@
 # Dependencies
-node_modules/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
 
 # Local secrets
 secret.txt

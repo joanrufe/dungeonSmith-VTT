@@ -2,6 +2,10 @@
 
 Goal: convert the current Node/Express/Socket.IO backend to Python/Flask while keeping the existing browser UI, scene files, media folders, and gameplay behavior intact.
 
+Status: initial Flask migration is implemented in `app.py`. The batch scripts now run/build the Python app, and the browser loads a local Socket.IO client from `public/lib/socket.io/socket.io.min.js`.
+
+Note: this migration should be treated as a backend/platform preference, not a slimming requirement. The current custom JavaScript is already small; the biggest size targets are media, uploads, music, dice assets, and dependency packaging.
+
 ## Target Stack
 
 - Flask for HTTP routes and static file hosting
@@ -22,7 +26,7 @@ Goal: convert the current Node/Express/Socket.IO backend to Python/Flask while k
 
 ## Backend Files To Replace
 
-Replace these Node files with Python equivalents:
+These Node files have Python equivalents now and are no longer used by the run/build scripts:
 
 - `server.js`
 - `app.js`
@@ -127,11 +131,12 @@ public/
    - Broadcast `diceRolled`, `diceResult`, and `diceCleared`.
 
 10. Add run/build scripts
-   - Replace or add:
-     - `Run_DND_VTT_Python.bat`
-     - `Build_DND_VTT_Python.bat`
-   - Run script should prompt for port.
+   - Use:
+     - `Run_DND_VTT.bat`
+     - `Build_DND_VTT.bat`
+   - Run script should use a script-set port variable, not prompt interactively.
    - Build script should create/use `.venv`, install `requirements.txt`, and syntax-check Python files.
+   - Build script should create a slim runtime folder and exclude repo-only notes, source archives, and development-only files.
 
 ## Compatibility Checklist
 
@@ -164,6 +169,7 @@ Use `eventlet` or another supported async mode for WebSocket support. If eventle
 - File upload body parsing differences between Express/Multer and Flask.
 - Session behavior for socket connections.
 - Windows path handling for media folders.
+- Accidentally changing frontend behavior while trying to optimize. Keep `public/js` mostly unchanged unless a specific bug or parity issue requires it.
 
 ## Recommended Strategy
 
@@ -175,6 +181,6 @@ Do this in phases, not as one rewrite:
 4. Socket.IO scene/token sync works.
 5. Media/music upload routes work.
 6. Dice/music/grid/snap/ping events work.
-7. Remove Node backend only after parity testing.
+7. Remove old Node files only after browser parity testing.
 
-Keep the Node version runnable until the Flask version passes the compatibility checklist.
+Keep the old Node source files available as reference until the Flask version passes the compatibility checklist in a real browser session.

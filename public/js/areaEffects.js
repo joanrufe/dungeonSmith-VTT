@@ -120,6 +120,7 @@
       hidden:           false,
       movableByPlayers: false,
       rotation:         0,
+      isAreaEffect:     true,
     };
 
     sm.socket.emit('addToken', { sceneId: sm.currentScene.sceneId, token });
