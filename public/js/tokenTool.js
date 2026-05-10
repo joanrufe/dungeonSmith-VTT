@@ -51,6 +51,9 @@
         }
       }
 
+      // Locked tokens cannot be moved by anyone
+      if (token.locked) return;
+
       // Players can only move tokens explicitly allowed by the DM
       if (!ctx.isDM && !token.movableByPlayers) return;
 

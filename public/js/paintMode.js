@@ -30,23 +30,30 @@
 
   // Track col-row → tokenId so we can erase
   const tileMap = {}; // key: "col,row" → tokenId
+  const svgCache = {};
+  let lastPaintKey = null;
 
   // ── Build a colored SVG data-URL for a tool ─────────────
   function makeSVG(tool) {
-    let cfg;
     if (tool === 'custom') {
-      cfg = {
-        bg: document.getElementById('custom-paint-fill').value,
-        border: document.getElementById('custom-paint-outline').value
-      };
-    } else {
-      cfg = TOOLS[tool];
+      const bg     = document.getElementById('custom-paint-fill').value;
+      const border = document.getElementById('custom-paint-outline').value;
+      return `data:image/svg+xml,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${gridSize}" height="${gridSize}">` +
+        `<rect width="${gridSize}" height="${gridSize}" fill="${bg}" stroke="${border}" stroke-width="1"/>` +
+        `</svg>`
+      )}`;
     }
-    return `data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${gridSize}" height="${gridSize}">` +
-      `<rect width="${gridSize}" height="${gridSize}" fill="${cfg.bg}" stroke="${cfg.border}" stroke-width="1"/>` +
-      `</svg>`
-    )}`;
+    const key = `${tool}:${gridSize}`;
+    if (!svgCache[key]) {
+      const cfg = TOOLS[tool];
+      svgCache[key] = `data:image/svg+xml,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${gridSize}" height="${gridSize}">` +
+        `<rect width="${gridSize}" height="${gridSize}" fill="${cfg.bg}" stroke="${cfg.border}" stroke-width="1"/>` +
+        `</svg>`
+      )}`;
+    }
+    return svgCache[key];
   }
 
   // ── Get DM socket + sceneManager (wait for dm.js to load) ─
@@ -285,12 +292,14 @@
   function buildGrid() {
     gridCanvas = document.createElement('canvas');
     gridCanvas.id = 'paint-grid-canvas';
+    const w = window.innerWidth * 2;
+    const h = window.innerHeight * 2;
     gridCanvas.style.cssText = `
       position:absolute; top:0; left:0;
       pointer-events:none; z-index:1; opacity:.35;
-      width:6000px; height:6000px;`;
-    gridCanvas.width  = 6000;
-    gridCanvas.height = 6000;
+      width:${w}px; height:${h}px;`;
+    gridCanvas.width  = w;
+    gridCanvas.height = h;
     drawGrid();
   }
 
@@ -326,7 +335,7 @@
   }
 
   function updateGrid() { drawGrid(); gridCanvas.style.display = showGrid ? '' : 'none'; }
-  function rebuildGrid() { drawGrid(); }
+  function rebuildGrid() { Object.keys(svgCache).forEach(k => delete svgCache[k]); drawGrid(); }
 
   // ── Mouse events ─────────────────────────────────────────
   function bindMouseEvents() {
@@ -347,7 +356,7 @@
         handlePaint(e, sc);
       });
       sc.addEventListener('mouseleave', hidePreview);
-      window.addEventListener('mouseup', () => { isDrawing = false; });
+      window.addEventListener('mouseup', () => { isDrawing = false; lastPaintKey = null; });
     }
     tryBind();
   }
@@ -364,6 +373,10 @@
     const my        = (e.clientY - rect.top)  / scale - offsetY;
     const originCol = Math.floor(mx / gridSize - (brushSize - 1) / 2);
     const originRow = Math.floor(my / gridSize - (brushSize - 1) / 2);
+
+    const currentKey = `${originCol},${originRow}`;
+    if (currentKey === lastPaintKey) return;
+    lastPaintKey = currentKey;
 
     if (activeTool === 'eraser') {
       for (let dc = 0; dc < brushSize; dc++) {

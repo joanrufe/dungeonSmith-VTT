@@ -10,7 +10,7 @@
   align-items: center;
   gap: 8px;
   box-sizing: border-box;
-  z-index: 100;
+  z-index: 2800;
   background: rgba(8,8,8,0.94);
   border-bottom: 1px solid var(--ss-border);
 }

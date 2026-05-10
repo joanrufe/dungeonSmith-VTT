@@ -13,13 +13,10 @@ export class PanZoomHandler {
   }
 
   setupEventListeners() {
-    // Zooming with mouse wheel
     this.container.addEventListener('wheel', (event) => this.onWheel(event), { passive: false });
-
-    // Panning with middle mouse button
     this.container.addEventListener('mousedown', (event) => this.onMouseDown(event));
-    document.addEventListener('mousemove', (event) => this.onMouseMove(event));
-    document.addEventListener('mouseup', (event) => this.onMouseUp(event));
+    this._onMove = (event) => this.onMouseMove(event);
+    this._onUp   = (event) => this.onMouseUp(event);
   }
 
   onWheel(event) {
@@ -56,34 +53,31 @@ export class PanZoomHandler {
 
   onMouseDown(event) {
     if (event.button === 1) {
-      // Middle mouse button
       this.isPanning = true;
       this.startX = event.clientX;
       this.startY = event.clientY;
-      event.preventDefault(); // Prevent default middle mouse behavior
+      event.preventDefault();
+      document.addEventListener('mousemove', this._onMove);
+      document.addEventListener('mouseup', this._onUp);
     }
   }
 
   onMouseMove(event) {
-    if (this.isPanning) {
-      const deltaX = (event.clientX - this.startX) / this.sceneRenderer.scale;
-      const deltaY = (event.clientY - this.startY) / this.sceneRenderer.scale;
-
-      this.sceneRenderer.offsetX += deltaX;
-      this.sceneRenderer.offsetY += deltaY;
-
-      this.startX = event.clientX;
-      this.startY = event.clientY;
-
-      // Update all token positions
-      this.sceneRenderer.updateAllTokenElements();
-    }
+    const deltaX = (event.clientX - this.startX) / this.sceneRenderer.scale;
+    const deltaY = (event.clientY - this.startY) / this.sceneRenderer.scale;
+    this.sceneRenderer.offsetX += deltaX;
+    this.sceneRenderer.offsetY += deltaY;
+    this.startX = event.clientX;
+    this.startY = event.clientY;
+    this.sceneRenderer.updateAllTokenElements();
   }
 
   onMouseUp(event) {
-    if (event.button === 1 && this.isPanning) { // Middle mouse button
+    if (event.button === 1) {
       this.isPanning = false;
       event.preventDefault();
+      document.removeEventListener('mousemove', this._onMove);
+      document.removeEventListener('mouseup', this._onUp);
     }
   }
 

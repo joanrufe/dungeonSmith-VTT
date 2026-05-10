@@ -1,7 +1,5 @@
 // public/js/sceneManager.js
 
-import { extractDominantColor } from './utils.js';
-
 export class SceneManager {
   constructor(socket, sceneRenderer, tokenManager, sceneContainer) {
     this.socket = socket;
@@ -41,8 +39,10 @@ export class SceneManager {
       this.sceneRenderer.tokens.push(token);
       this.sceneRenderer.renderToken(token);
       this.tokenManager.setupTokenInteractions(token);
-      const element = document.getElementById(`token-${token.tokenId}`);
-      if (element) element.addEventListener('click', (e) => this.onTokenClick(e, token.tokenId));
+      if (!token.isPaintTile) {
+        const element = document.getElementById(`token-${token.tokenId}`);
+        if (element) element.addEventListener('click', (e) => this.onTokenClick(e, token.tokenId));
+      }
     });
 
     this.socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
@@ -250,25 +250,21 @@ export class SceneManager {
     // After rendering tokens, setup interactions
     scene.tokens.forEach((token) => {
       this.tokenManager.setupTokenInteractions(token);
-
-      // Additional DM-specific interactions
+      if (token.isPaintTile) return;
       const element = document.getElementById(`token-${token.tokenId}`);
       if (element) {
-        // Add click event listener for token selection
         element.addEventListener('click', (event) => this.onTokenClick(event, token.tokenId));
       }
     });
-
-    // Update the background color based on tokens
-    this.sceneRenderer.setBackgroundBasedOnTokens();
   }
 
   onTokenClick(event, tokenId) {
     event.stopPropagation(); // Prevent click from bubbling up to sceneContainer
 
-    // Click-through: if clicking an area effect, check for an interactive token below
+    // Click-through: if clicking an area effect interior, pass click to token below.
+    // Clicking the outline ring keeps the area effect selected.
     const clickedToken = this.currentScene?.tokens.find(t => t.tokenId === tokenId);
-    if (clickedToken?.isAreaEffect) {
+    if (clickedToken?.isAreaEffect && !this._isClickOnEffectOutline(event, clickedToken)) {
       const allAtPoint = document.elementsFromPoint(event.clientX, event.clientY);
       for (const el of allAtPoint) {
         if (el.dataset.tokenId === tokenId) continue;
@@ -295,6 +291,41 @@ export class SceneManager {
     this.selectedTokenIds.add(tokenId);
     this.selectedTokenId = tokenId;
     this.refreshSelectionStyles();
+  }
+
+  _isClickOnEffectOutline(event, token) {
+    const rect = this.sceneContainer.getBoundingClientRect();
+    const r    = this.sceneRenderer;
+
+    // Click position relative to the scene container in screen px
+    const cx = event.clientX - rect.left;
+    const cy = event.clientY - rect.top;
+
+    // Token bounding box in screen px
+    const left   = (token.x + r.offsetX) * r.scale;
+    const top    = (token.y + r.offsetY) * r.scale;
+    const w      = token.width  * r.scale;
+    const h      = token.height * r.scale;
+    const right  = left + w;
+    const bottom = top  + h;
+
+    // Stroke thickness in screen px (SVG uses ~2.5% of token size) plus click tolerance
+    const strokePx = Math.max(6, Math.min(w, h) * 0.025) + 6;
+
+    if (token.areaShape === 'circle') {
+      // Distance from click to circle centre vs radius
+      const dist = Math.hypot(cx - (left + w / 2), cy - (top + h / 2));
+      return Math.abs(dist - w / 2) <= strokePx;
+    }
+
+    // Square, cone, line — border ring of the bounding box
+    if (cx < left || cx > right || cy < top || cy > bottom) return false;
+    return (
+      cx <= left   + strokePx ||
+      cx >= right  - strokePx ||
+      cy <= top    + strokePx ||
+      cy >= bottom - strokePx
+    );
   }
 
   onSceneClick(event) {
@@ -368,6 +399,8 @@ export class SceneManager {
       this.duplicateSelectedToken();
     } else if (this.hasSelection() && event.key.toLowerCase() === 'i') {
       this.forEachSelectedTokenId(tokenId => this.toggleTokenMovableByPlayers(tokenId));
+    } else if (this.hasSelection() && event.key.toLowerCase() === 'l') {
+      this.forEachSelectedTokenId(tokenId => this.toggleTokenLocked(tokenId));
     } else if (this.hasSelection() && event.key.toLowerCase() === 'q') {
       this.rotateSelectedTokens(event.shiftKey ? -5 : -15);
     } else if (this.hasSelection() && event.key.toLowerCase() === 'e') {
@@ -602,6 +635,19 @@ export class SceneManager {
     this.clearSelection();
   }
 
+  toggleTokenLocked(tokenId) {
+    const token = this.currentScene.tokens.find(t => t.tokenId === tokenId);
+    if (!token || token.isPaintTile) return;
+    token.locked = !token.locked;
+    this.sceneRenderer.updateTokenElement(token);
+    this.tokenManager.setupTokenInteractions(token);
+    this.socket.emit('updateToken', {
+      sceneId: this.currentScene.sceneId,
+      tokenId,
+      properties: { locked: token.locked },
+    });
+  }
+
   toggleTokenMovableByPlayers(tokenId) {
     const token = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
     if (token) {
@@ -677,7 +723,7 @@ export class SceneManager {
       this.sceneRenderer.updateTokenElement(token);
 
       // Only re-setup interactions when interaction-relevant props change
-      if ('movableByPlayers' in properties || 'hidden' in properties) {
+      if ('movableByPlayers' in properties || 'hidden' in properties || 'locked' in properties) {
         this.tokenManager.setupTokenInteractions(token);
       }
     }

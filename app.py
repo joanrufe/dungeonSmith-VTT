@@ -21,6 +21,7 @@ SECRET_FILE = SECRET_DIR / "secrets.txt"
 LEGACY_SECRET_FILE = BASE_DIR / "secret.txt"
 UPLOADS_DIR = PUBLIC_DIR / "uploads"
 MEDIA_DIR = PUBLIC_DIR / "media"
+PLAYER_MEDIA_DIR = PUBLIC_DIR / "player-media"
 MUSIC_DIR = PUBLIC_DIR / "music"
 NOTES_FILE = DATA_DIR / "sticky-notes.json"
 
@@ -97,6 +98,13 @@ def safe_folder_name(value):
 
 def safe_relative_media_path(url):
     rel = re.sub(r"^/media/", "", url or "")
+    if not rel or ".." in rel or rel.startswith(("/", "\\")):
+        return None
+    return rel
+
+
+def safe_relative_player_media_path(url):
+    rel = re.sub(r"^/player-media/", "", url or "")
     if not rel or ".." in rel or rel.startswith(("/", "\\")):
         return None
     return rel
@@ -261,6 +269,8 @@ def redirect_static_html_names():
         return redirect("/dm")
     if request.path == "/files.html":
         return redirect("/files")
+    if request.path == "/player-files.html":
+        return redirect("/player-files")
     return None
 
 
@@ -318,6 +328,13 @@ def files_page():
     if not require_dm():
         return redirect("/dm-login")
     return send_from_directory(PUBLIC_DIR, "files.html")
+
+
+@app.get("/player-files")
+def player_files_page():
+    if not require_player():
+        return redirect("/player-login")
+    return send_from_directory(PUBLIC_DIR, "player-files.html")
 
 
 @app.post("/createScene")
@@ -456,8 +473,8 @@ def delete_music():
 
 @app.get("/mediaList")
 def media_list():
-    if not require_dm():
-        return redirect("/dm-login")
+    if not require_player():
+        return redirect("/player-login")
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     folders = []
     root_files = []
@@ -510,6 +527,101 @@ def media_upload():
         if allowed:
             file.save(dest / secure_filename(file.filename))
     return jsonify({"ok": True, "count": len(files)})
+
+
+@app.get("/playerMediaList")
+def player_media_list():
+    if not require_player():
+        return redirect("/player-login")
+    PLAYER_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    folders = []
+    root_files = []
+    for entry in PLAYER_MEDIA_DIR.iterdir():
+        if entry.name.startswith("."):
+            continue
+        if entry.is_dir():
+            files = []
+            for sub in entry.iterdir():
+                media_type = get_media_type(sub.name)
+                if sub.is_file() and not sub.name.startswith(".") and media_type:
+                    files.append({"name": sub.name, "url": f"/player-media/{entry.name}/{sub.name}", "mediaType": media_type})
+            folders.append({"name": entry.name, "files": files})
+        elif entry.is_file():
+            media_type = get_media_type(entry.name)
+            if media_type:
+                root_files.append({"name": entry.name, "url": f"/player-media/{entry.name}", "mediaType": media_type})
+    return jsonify({"folders": folders, "rootFiles": root_files})
+
+
+@app.post("/playerMediaUpload")
+def player_media_upload():
+    if not require_player():
+        return redirect("/player-login")
+    provided = request.headers.get("X-DM-Password") or ""
+    if provided != app.config["DM_PASSWORD"]:
+        return jsonify({"error": "Invalid DM password."}), 403
+    folder = safe_folder_name(request.args.get("folder"))
+    dest = PLAYER_MEDIA_DIR / folder if folder else PLAYER_MEDIA_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+    files = request.files.getlist("files")
+    for file in files:
+        ext = Path(file.filename).suffix.lower()
+        mime_type = file.mimetype or ""
+        allowed = (
+            mime_type.startswith("image/")
+            or mime_type.startswith("video/")
+            or mime_type == "application/pdf"
+            or mime_type.startswith("text/")
+            or ext in MEDIA_EXTS
+        )
+        if allowed:
+            file.save(dest / secure_filename(file.filename))
+    return jsonify({"ok": True, "count": len(files)})
+
+
+@app.post("/playerMediaFolder")
+def player_media_folder_create():
+    if not require_player():
+        return redirect("/player-login")
+    provided = request.headers.get("X-DM-Password") or ""
+    if provided != app.config["DM_PASSWORD"]:
+        return jsonify({"error": "Invalid DM password."}), 403
+    name = safe_folder_name(json_body().get("name"))
+    if not name:
+        return jsonify({"error": "Invalid folder name"}), 400
+    (PLAYER_MEDIA_DIR / name).mkdir(parents=True, exist_ok=True)
+    return jsonify({"ok": True})
+
+
+@app.delete("/playerMediaFolder")
+def player_media_folder_delete():
+    if not require_player():
+        return redirect("/player-login")
+    provided = request.headers.get("X-DM-Password") or ""
+    if provided != app.config["DM_PASSWORD"]:
+        return jsonify({"error": "Invalid DM password."}), 403
+    name = safe_folder_name(json_body().get("name"))
+    if not name:
+        return jsonify({"error": "Invalid folder name"}), 400
+    shutil.rmtree(PLAYER_MEDIA_DIR / name, ignore_errors=True)
+    return jsonify({"ok": True})
+
+
+@app.delete("/playerMediaFile")
+def player_media_file_delete():
+    if not require_player():
+        return redirect("/player-login")
+    provided = request.headers.get("X-DM-Password") or ""
+    if provided != app.config["DM_PASSWORD"]:
+        return jsonify({"error": "Invalid DM password."}), 403
+    rel = safe_relative_player_media_path(json_body().get("url"))
+    if not rel:
+        return jsonify({"error": "Bad path"}), 400
+    try:
+        (PLAYER_MEDIA_DIR / rel).unlink()
+    except OSError:
+        return jsonify({"error": "File not found."}), 404
+    return jsonify({"ok": True})
 
 
 @app.delete("/mediaFolder")

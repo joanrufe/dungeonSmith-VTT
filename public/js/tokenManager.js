@@ -8,13 +8,18 @@ export class TokenManager {
   }
 
   setupTokenInteractions(token) {
+    if (token.isPaintTile) return;
     if (!this.isDM && token.hidden) return;
 
     const element = document.getElementById(`token-${token.tokenId}`);
     if (!element) return;
 
     if (this.isDM) {
-      this._attachResize(element, token);
+      if (token.locked) {
+        if (typeof interact !== 'undefined') interact(element).unset();
+      } else {
+        this._attachResize(element, token);
+      }
       element.style.border = token.movableByPlayers ? '2px dashed blue' : '';
     }
 

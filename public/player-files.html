@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SceneSmith - Player Files</title>
+  <link rel="icon" type="image/png" href="./SceneSmith.png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css?v=scenesmith-clean-1">
+  <link rel="stylesheet" href="/css/media.css?v=scenesmith-clean-1">
+  <style>
+    #dm-mode-btn {
+      background: transparent;
+      border: 1px solid var(--border, #444);
+      color: var(--text-muted, #aaa);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    #dm-mode-btn.dm-active {
+      background: rgba(255,50,50,0.15);
+      border-color: #ff4444;
+      color: #ff7777;
+    }
+
+    #dm-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    #dm-modal.open { display: flex; }
+    #dm-modal-box {
+      background: var(--panel-bg, #1e1e2e);
+      border: 1px solid var(--border, #333);
+      border-radius: 8px;
+      padding: 24px;
+      min-width: 300px;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #dm-modal-box h3 { margin: 0; font-size: 1rem; }
+    #dm-modal-box p  { margin: 0; font-size: 0.85rem; color: #aaa; }
+    #dm-modal-box input[type="password"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 5px;
+      border: 1px solid var(--border, #444);
+      background: var(--bg, #13131f);
+      color: var(--text, #eee);
+      font-size: 0.9rem;
+    }
+    #dm-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    #dm-modal-err { color: tomato; font-size: 0.8rem; min-height: 1em; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <i class="fa-solid fa-photo-film" style="color:#ff7a18;font-size:15px;"></i>
+  <h1>Player Files</h1>
+  <button class="top-btn" id="dm-mode-btn" title="Enable DM mode to upload, delete and manage folders">
+    <i class="fa-solid fa-lock"></i> DM Mode
+  </button>
+  <button class="top-btn" id="new-folder-btn" style="display:none"><i class="fa-solid fa-folder-plus"></i> New Folder</button>
+  <button class="top-btn primary" id="upload-btn" style="display:none"><i class="fa-solid fa-upload"></i> Upload</button>
+  <input type="file" id="file-input" multiple accept="image/*,video/*,application/pdf,text/*,.txt,.md,.json,.csv,.log">
+  <input type="text" id="search-input" placeholder="Search files…">
+  <div id="status-msg">Double-click to download</div>
+</div>
+
+<div id="main" class="tab-view">
+  <div id="sidebar">
+    <div id="sidebar-folders"></div>
+    <div id="drop-zone" style="display:none">
+      <i class="fa-solid fa-cloud-arrow-up"></i>
+      Drop files here<br>to upload
+    </div>
+  </div>
+  <div id="grid-area">
+    <div id="upload-bar"><div id="upload-bar-fill"></div></div>
+    <div id="grid"></div>
+    <div id="empty-msg"><i class="fa-solid fa-folder-open"></i>No files in this folder</div>
+  </div>
+</div>
+
+<!-- DM mode unlock modal -->
+<div id="dm-modal">
+  <div id="dm-modal-box">
+    <h3><i class="fa-solid fa-lock"></i> Enable DM Mode</h3>
+    <p>Enter the DM password to unlock upload, delete, and folder management.</p>
+    <input type="password" id="dm-pw-input" placeholder="DM password" autocomplete="off">
+    <div id="dm-modal-err"></div>
+    <div id="dm-modal-actions">
+      <button class="top-btn" id="modal-cancel-btn">Cancel</button>
+      <button class="top-btn primary" id="modal-ok-btn">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const sidebarEl    = document.getElementById('sidebar-folders');
+  const grid         = document.getElementById('grid');
+  const emptyMsg     = document.getElementById('empty-msg');
+  const searchEl     = document.getElementById('search-input');
+  const statusEl     = document.getElementById('status-msg');
+  const dropZone     = document.getElementById('drop-zone');
+  const fileInput    = document.getElementById('file-input');
+  const uploadBar    = document.getElementById('upload-bar');
+  const uploadFill   = document.getElementById('upload-bar-fill');
+  const gridArea     = document.getElementById('grid-area');
+  const dmModal      = document.getElementById('dm-modal');
+  const dmPwInput    = document.getElementById('dm-pw-input');
+  const dmModalErr   = document.getElementById('dm-modal-err');
+  const dmModeBtn    = document.getElementById('dm-mode-btn');
+  const newFolderBtn = document.getElementById('new-folder-btn');
+  const uploadBtn    = document.getElementById('upload-btn');
+
+  let allData      = { folders: [], rootFiles: [] };
+  let activeFolder = '__all__';
+  let isDmMode     = false;
+  let dmPassword   = '';
+
+  // ── DM mode toggle ─────────────────────────────────────────────
+  dmModeBtn.addEventListener('click', () => {
+    if (isDmMode) {
+      exitDmMode();
+    } else {
+      openDmModal();
+    }
+  });
+
+  function openDmModal() {
+    dmPwInput.value = '';
+    dmModalErr.textContent = '';
+    dmModal.classList.add('open');
+    setTimeout(() => dmPwInput.focus(), 50);
+  }
+
+  document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+    dmModal.classList.remove('open');
+  });
+
+  document.getElementById('modal-ok-btn').addEventListener('click', tryEnterDmMode);
+  dmPwInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryEnterDmMode(); });
+
+  function tryEnterDmMode() {
+    const pw = dmPwInput.value.trim();
+    if (!pw) { dmModalErr.textContent = 'Password required.'; return; }
+
+    fetch('/playerMediaUpload', {
+      method: 'POST',
+      headers: { 'X-DM-Password': pw },
+    })
+      .then(r => {
+        if (r.status === 403) {
+          dmModalErr.textContent = 'Wrong DM password.';
+        } else {
+          dmPassword = pw;
+          isDmMode = true;
+          dmModal.classList.remove('open');
+          applyDmMode();
+          setStatus('DM Mode active.', '#ff7a18');
+          reload();
+        }
+      })
+      .catch(() => { dmModalErr.textContent = 'Server error. Try again.'; });
+  }
+
+  function applyDmMode() {
+    dmModeBtn.classList.add('dm-active');
+    dmModeBtn.innerHTML = '<i class="fa-solid fa-lock-open"></i> DM Mode';
+    newFolderBtn.style.display = '';
+    uploadBtn.style.display = '';
+    dropZone.style.display = '';
+    setStatus('DM Mode active — double-click to download, shift-click to delete.', '#ff7a18');
+    renderGrid(getFiles(activeFolder));
+  }
+
+  function exitDmMode() {
+    isDmMode = false;
+    dmPassword = '';
+    dmModeBtn.classList.remove('dm-active');
+    dmModeBtn.innerHTML = '<i class="fa-solid fa-lock"></i> DM Mode';
+    newFolderBtn.style.display = 'none';
+    uploadBtn.style.display = 'none';
+    dropZone.style.display = 'none';
+    setStatus('Double-click to download', '');
+    renderGrid(getFiles(activeFolder));
+  }
+
+  // ── Load ───────────────────────────────────────────────────────
+  function reload() {
+    fetch('/playerMediaList')
+      .then(r => r.json())
+      .then(data => {
+        allData = data;
+        buildSidebar();
+        showFolder(activeFolder);
+      })
+      .catch(() => setStatus('Failed to load media list.', 'tomato'));
+  }
+  reload();
+
+  // ── Sidebar ────────────────────────────────────────────────────
+  function buildSidebar() {
+    sidebarEl.innerHTML = '';
+    const allCount = allData.rootFiles.length +
+      allData.folders.reduce((n, f) => n + f.files.length, 0);
+    addFolderItem('__all__',  'fa-layer-group', 'All Files', allCount);
+    if (allData.rootFiles.length > 0)
+      addFolderItem('__root__', 'fa-inbox', 'Unsorted', allData.rootFiles.length);
+    allData.folders.forEach(f => addFolderItem(f.name, 'fa-folder', f.name, f.files.length));
+  }
+
+  function addFolderItem(key, icon, label, count) {
+    const el = document.createElement('div');
+    el.className = 'folder-item' + (key === activeFolder ? ' active' : '');
+    const isRealFolder = key !== '__all__' && key !== '__root__';
+    el.innerHTML = `
+      <i class="fa-solid ${icon}"></i>
+      <span class="fname">${label}</span>
+      <span class="folder-count">${count}</span>
+      ${isDmMode && isRealFolder ? `
+        <span class="folder-actions">
+          <button class="folder-act-btn del del-btn" title="Delete folder"><i class="fa-solid fa-trash"></i></button>
+        </span>` : ''}`;
+    el.addEventListener('click', () => showFolder(key));
+    if (isDmMode && isRealFolder) {
+      el.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); deleteFolder(key); });
+    }
+    sidebarEl.appendChild(el);
+  }
+
+  // ── Show folder ────────────────────────────────────────────────
+  function showFolder(key) {
+    const validKeys = ['__all__', '__root__', ...allData.folders.map(f => f.name)];
+    activeFolder = validKeys.includes(key) ? key : '__all__';
+    document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+    const items = sidebarEl.querySelectorAll('.folder-item');
+    const keys  = ['__all__', allData.rootFiles.length > 0 ? '__root__' : null, ...allData.folders.map(f => f.name)].filter(Boolean);
+    const idx   = keys.indexOf(activeFolder);
+    if (idx >= 0 && items[idx]) items[idx].classList.add('active');
+    renderGrid(getFiles(activeFolder));
+  }
+
+  function getFiles(key) {
+    if (key === '__all__') return [...allData.rootFiles, ...allData.folders.flatMap(f => f.files)];
+    if (key === '__root__') return allData.rootFiles;
+    const folder = allData.folders.find(f => f.name === key);
+    return folder ? folder.files : [];
+  }
+
+  // ── Render grid ────────────────────────────────────────────────
+  function renderGrid(files) {
+    const query    = searchEl.value.trim().toLowerCase();
+    const filtered = query ? files.filter(f => f.name.toLowerCase().includes(query)) : files;
+    grid.innerHTML = '';
+    emptyMsg.style.display = filtered.length === 0 ? 'block' : 'none';
+
+    filtered.forEach(file => {
+      const card = document.createElement('div');
+      card.className = 'thumb-card';
+      card.title = isDmMode
+        ? `${file.name}\nDouble-click to download\nShift-click to delete`
+        : `${file.name}\nDouble-click to download`;
+
+      if (isDmMode) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'thumb-delete';
+        delBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        delBtn.title = 'Delete file';
+        delBtn.addEventListener('click', e => { e.stopPropagation(); deleteFile(file); });
+        card.appendChild(delBtn);
+      }
+
+      const inner = document.createElement('div');
+      inner.className = 'thumb-inner';
+
+      if (file.mediaType === 'image') {
+        const img = document.createElement('img');
+        img.src = file.url;
+        img.className = 'thumb-img';
+        img.loading = 'lazy';
+        inner.appendChild(img);
+      } else {
+        inner.appendChild(makeFileIcon(file));
+      }
+
+      const label = document.createElement('div');
+      label.className = 'thumb-label';
+      label.textContent = file.name;
+      inner.appendChild(label);
+      card.appendChild(inner);
+
+      card.addEventListener('click', e => {
+        if (isDmMode && e.shiftKey) deleteFile(file);
+      });
+      card.addEventListener('dblclick', () => downloadFile(file));
+      grid.appendChild(card);
+    });
+  }
+
+  function makeFileIcon(file) {
+    const icon = document.createElement('div');
+    icon.className = 'file-icon';
+    const meta = getFileMeta(file);
+    icon.innerHTML = `<i class="fa-solid ${meta.icon}"></i><span>${meta.label}</span>`;
+    return icon;
+  }
+
+  function getFileMeta(file) {
+    if (file.mediaType === 'video') return { icon: 'fa-file-video', label: 'Video' };
+    if (file.mediaType === 'pdf')   return { icon: 'fa-file-pdf',   label: 'PDF' };
+    if (file.mediaType === 'text')  return { icon: 'fa-file-lines', label: 'Text' };
+    return { icon: 'fa-file', label: 'File' };
+  }
+
+  function downloadFile(file) {
+    const link = document.createElement('a');
+    link.href = file.url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setStatus('Download started.', '#ff7a18');
+  }
+
+  // ── DM mode: New Folder ────────────────────────────────────────
+  newFolderBtn.addEventListener('click', () => {
+    const name = prompt('Folder name:');
+    if (!name || !name.trim()) return;
+    fetch('/playerMediaFolder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-DM-Password': dmPassword },
+      body: JSON.stringify({ name: name.trim() }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) { setStatus('Folder created!', '#ff7a18'); reload(); }
+        else setStatus(d.error || 'Error creating folder.', 'tomato');
+      })
+      .catch(() => setStatus('Error creating folder.', 'tomato'));
+  });
+
+  // ── DM mode: Upload ────────────────────────────────────────────
+  uploadBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { if (isDmMode) uploadFiles(fileInput.files); });
+
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (isDmMode && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+  });
+  dropZone.addEventListener('click', () => { if (isDmMode) fileInput.click(); });
+
+  gridArea.addEventListener('dragover',  e => { e.preventDefault(); gridArea.classList.add('dragover'); });
+  gridArea.addEventListener('dragleave', e => { if (!gridArea.contains(e.relatedTarget)) gridArea.classList.remove('dragover'); });
+  gridArea.addEventListener('drop', e => {
+    e.preventDefault();
+    gridArea.classList.remove('dragover');
+    if (isDmMode && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+  });
+
+  function uploadFiles(files) {
+    if (!files || files.length === 0 || !isDmMode) return;
+    const folder = (activeFolder === '__all__' || activeFolder === '__root__') ? '' : activeFolder;
+    const fd = new FormData();
+    Array.from(files).forEach(f => fd.append('files', f));
+    const url = '/playerMediaUpload' + (folder ? `?folder=${encodeURIComponent(folder)}` : '');
+
+    uploadBar.style.display = 'block';
+    uploadFill.style.width = '0%';
+    setStatus(`Uploading ${files.length} file(s)…`, '#aaa');
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('X-DM-Password', dmPassword);
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable)
+        uploadFill.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+    });
+    xhr.addEventListener('load', () => {
+      uploadFill.style.width = '100%';
+      setTimeout(() => { uploadBar.style.display = 'none'; uploadFill.style.width = '0%'; }, 600);
+      fileInput.value = '';
+      if (xhr.status === 200) {
+        setStatus('Uploaded!', '#ff7a18');
+        reload();
+      } else if (xhr.status === 403) {
+        setStatus('DM password rejected — try re-entering DM mode.', 'tomato');
+        exitDmMode();
+      } else {
+        setStatus('Upload failed.', 'tomato');
+      }
+    });
+    xhr.addEventListener('error', () => setStatus('Upload failed.', 'tomato'));
+    xhr.send(fd);
+  }
+
+  // ── DM mode: Delete file ───────────────────────────────────────
+  function deleteFile(file) {
+    if (!isDmMode) return;
+    if (!confirm(`Delete "${file.name}"? This cannot be undone.`)) return;
+    fetch('/playerMediaFile', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'X-DM-Password': dmPassword },
+      body: JSON.stringify({ url: file.url }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) { setStatus('File deleted.', '#aaa'); reload(); }
+        else setStatus(d.error || 'Error deleting file.', 'tomato');
+      })
+      .catch(() => setStatus('Error deleting file.', 'tomato'));
+  }
+
+  // ── DM mode: Delete folder ─────────────────────────────────────
+  function deleteFolder(name) {
+    if (!isDmMode) return;
+    const folder = allData.folders.find(f => f.name === name);
+    const count  = folder ? folder.files.length : 0;
+    const msg    = count > 0
+      ? `Delete folder "${name}" and all ${count} file(s) inside? This cannot be undone.`
+      : `Delete empty folder "${name}"?`;
+    if (!confirm(msg)) return;
+    fetch('/playerMediaFolder', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'X-DM-Password': dmPassword },
+      body: JSON.stringify({ name }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          if (activeFolder === name) activeFolder = '__all__';
+          setStatus('Folder deleted.', '#aaa');
+          reload();
+        } else setStatus(d.error || 'Error deleting folder.', 'tomato');
+      })
+      .catch(() => setStatus('Error deleting folder.', 'tomato'));
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────
+  function setStatus(msg, color) {
+    statusEl.textContent = msg;
+    statusEl.style.color = color || '#ff7a18';
+  }
+
+  searchEl.addEventListener('input', () => renderGrid(getFiles(activeFolder)));
+})();
+</script>
+</body>
+</html>

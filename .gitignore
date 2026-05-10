@@ -1,5 +1,6 @@
 # Dependencies
 .venv/
+python-embed-*/
 
 # Python cache
 __pycache__/
@@ -20,6 +21,7 @@ data/scenes/**
 !data/scenes/.gitkeep
 
 # User-uploaded media and generated files
+# /files (DM) writes to public/media/, /player-files writes to public/player-media/
 public/uploads/**
 !public/uploads/
 !public/uploads/.gitkeep
@@ -29,3 +31,9 @@ public/music/**
 public/media/**
 !public/media/
 !public/media/.gitkeep
+public/player-media/**
+!public/player-media/
+!public/player-media/.gitkeep
+
+# Runtime data files
+data/sticky-notes.json

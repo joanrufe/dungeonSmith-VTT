@@ -43,17 +43,18 @@
 
   // ── RAF position sync ──────────────────────────────────────────
 
+  let _lastScale = null, _lastOffX = null, _lastOffY = null;
+
   function rafSync() {
     ensureLayer();
-    const ctx = getCtx();
-    if (ctx && notesLayer) {
-      const r = ctx.renderer;
-      notes.forEach(note => {
-        const el = notesLayer.querySelector(`[data-note-id="${note.id}"]`);
-        if (el) syncEl(el, note, r);
-      });
-    }
     requestAnimationFrame(rafSync);
+    if (!notes.length) return;
+    const ctx = getCtx();
+    if (!ctx || !notesLayer) return;
+    const r = ctx.renderer;
+    if (r.scale === _lastScale && r.offsetX === _lastOffX && r.offsetY === _lastOffY) return;
+    _lastScale = r.scale; _lastOffX = r.offsetX; _lastOffY = r.offsetY;
+    notes.forEach(note => { if (note.el) syncEl(note.el, note, r); });
   }
 
   // ── Element creation ───────────────────────────────────────────
@@ -68,6 +69,7 @@
     // Header (delete button only — not a drag restriction anymore)
     const head = document.createElement('div');
     head.className = 'sn-head';
+    head.addEventListener('mousedown', () => { if (editingId === note.id) exitEdit(); });
 
     const del = document.createElement('button');
     del.className = 'sn-del';
@@ -90,6 +92,7 @@
       enterEdit(note.id);
     });
 
+    note.el = el;
     return el;
   }
 
@@ -163,7 +166,8 @@
   function enterEdit(id) {
     if (editingId && editingId !== id) exitEdit();
     editingId = id;
-    const el = notesLayer && notesLayer.querySelector(`[data-note-id="${id}"]`);
+    const note = notes.find(n => n.id === id);
+    const el = note && note.el;
     if (!el) return;
     const body = el.querySelector('.sn-body');
     body.contentEditable = 'true';
@@ -180,12 +184,12 @@
 
   function exitEdit() {
     if (!editingId) return;
-    const el = notesLayer && notesLayer.querySelector(`[data-note-id="${editingId}"]`);
+    const note = notes.find(n => n.id === editingId);
+    const el = note && note.el;
     if (el) {
       const body = el.querySelector('.sn-body');
       body.contentEditable = 'false';
-      const note = notes.find(n => n.id === editingId);
-      if (note && note.text !== body.textContent) {
+      if (note.text !== body.textContent) {
         note.text = body.textContent;
         saveNotes();
       }
@@ -213,9 +217,9 @@
 
   function deleteNote(id) {
     if (editingId === id) editingId = null;
+    const note = notes.find(n => n.id === id);
+    if (note && note.el) note.el.remove();
     notes = notes.filter(n => n.id !== id);
-    const el = notesLayer && notesLayer.querySelector(`[data-note-id="${id}"]`);
-    if (el) el.remove();
     saveNotes();
   }
 

@@ -9,12 +9,50 @@ export class MusicManager {
 
     // Initialize the music list in the UI
     this.musicListElement = document.getElementById('music-list');
-
-    this.init();
   }
 
-  init() {
-    this.setupSocketListeners();
+  _buildTrackElement(track, index) {
+    const li = document.createElement('li');
+    li.classList.add('music-track-item');
+
+    const trackNameSpan = document.createElement('span');
+    trackNameSpan.textContent = track.name;
+    trackNameSpan.classList.add('track-name');
+
+    const controlsContainer = document.createElement('div');
+    controlsContainer.classList.add('controls-container');
+
+    const playPauseButton = document.createElement('button');
+    playPauseButton.classList.add('play-pause-button');
+    playPauseButton.innerHTML = track.isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+    playPauseButton.addEventListener('click', () => this.togglePlayPause(index, playPauseButton));
+
+    const volumeSlider = document.createElement('input');
+    volumeSlider.type = 'range';
+    volumeSlider.min = 0;
+    volumeSlider.max = 100;
+    volumeSlider.value = Math.round(Math.cbrt(track.volume) * 100);
+    volumeSlider.classList.add('volume-slider');
+
+    volumeSlider.addEventListener('input', () => {
+      const sliderValue = volumeSlider.value;
+      const volume = Math.pow(sliderValue / 100, 3);
+      this.setTrackVolume(index, volume);
+    });
+
+    const deleteButton = document.createElement('button');
+    deleteButton.classList.add('delete-button');
+    deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i>';
+    deleteButton.addEventListener('click', () => this.deleteMusicTrack(index));
+
+    controlsContainer.appendChild(playPauseButton);
+    controlsContainer.appendChild(volumeSlider);
+    controlsContainer.appendChild(deleteButton);
+
+    li.appendChild(trackNameSpan);
+    li.appendChild(controlsContainer);
+
+    return li;
   }
 
   // Method to add a music track
@@ -49,7 +87,7 @@ export class MusicManager {
     };
   
     this.musicTracks.push(track);
-    this.renderMusicList(); 
+    this.musicListElement.appendChild(this._buildTrackElement(track, this.musicTracks.length - 1));
   }
 
   // Generate a unique track ID
@@ -59,58 +97,9 @@ export class MusicManager {
 
   // Method to render the music list in the UI
   renderMusicList() {
-    this.musicListElement.innerHTML = ''; // Clear existing list
-  
+    this.musicListElement.innerHTML = '';
     this.musicTracks.forEach((track, index) => {
-      const li = document.createElement('li');
-      li.classList.add('music-track-item');
-  
-      // Track Name
-      const trackNameSpan = document.createElement('span');
-      trackNameSpan.textContent = track.name;
-      trackNameSpan.classList.add('track-name');
-  
-      // Controls Container
-      const controlsContainer = document.createElement('div');
-      controlsContainer.classList.add('controls-container');
-  
-      // Play/Pause Button
-      const playPauseButton = document.createElement('button');
-      playPauseButton.classList.add('play-pause-button');
-      playPauseButton.innerHTML = '<i class="fas fa-play"></i>';
-      playPauseButton.addEventListener('click', () => this.togglePlayPause(index, playPauseButton));
-  
-      // Volume Slider
-      const volumeSlider = document.createElement('input');
-      volumeSlider.type = 'range';
-      volumeSlider.min = 0;
-      volumeSlider.max = 100;
-      volumeSlider.value = 50; // Initialize slider at half
-      volumeSlider.classList.add('volume-slider');
-
-      // Event listener for volume changes
-      volumeSlider.addEventListener('input', () => {
-        const sliderValue = volumeSlider.value;
-        const volume = Math.pow(sliderValue / 100, 3); // Exponential mapping for logarithmic perception
-        this.setTrackVolume(index, volume);
-      });
-  
-      // Delete Button
-      const deleteButton = document.createElement('button');
-      deleteButton.classList.add('delete-button');
-      deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i>';
-      deleteButton.addEventListener('click', () => this.deleteMusicTrack(index));
-  
-      // Append controls to the controls container
-      controlsContainer.appendChild(playPauseButton);
-      controlsContainer.appendChild(volumeSlider);
-      controlsContainer.appendChild(deleteButton);
-  
-      // Append elements to the list item
-      li.appendChild(trackNameSpan);       // First line: Track name
-      li.appendChild(controlsContainer);   // Second line: Controls
-  
-      this.musicListElement.appendChild(li);
+      this.musicListElement.appendChild(this._buildTrackElement(track, index));
     });
   }
 
@@ -174,46 +163,42 @@ export class MusicManager {
   // Method to delete a music track
   deleteMusicTrack(index) {
     const track = this.musicTracks[index];
+    if (!track) return;
 
-    // Confirm deletion
     if (!confirm(`Are you sure you want to delete "${track.name}"?`)) {
       return;
     }
 
     fetch('/deleteMusic', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ filename: track.filename }) // Send the filename to the server
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: track.filename }),
     })
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        return response.json();
+      })
       .then(data => {
         if (data.success) {
-          // Stop and remove the audio element
           track.audioElement.pause();
           track.audioElement.src = '';
           track.audioElement = null;
 
-          // Remove the track from the array
-          this.musicTracks.splice(index, 1);
-          this.renderMusicList(); // Update the music list
+          // Use indexOf so the splice position is correct even if the list
+          // was rebuilt between the time this element was created and now.
+          const currentIndex = this.musicTracks.indexOf(track);
+          if (currentIndex !== -1) this.musicTracks.splice(currentIndex, 1);
+          this.renderMusicList();
 
-          // Notify players to delete the track
-          this.socket.emit('deleteTrack', {
-            trackId: track.trackId,
-          });
+          this.socket.emit('deleteTrack', { trackId: track.trackId });
         } else {
-          alert('Failed to delete music track.');
+          alert(`Failed to delete "${track.name}".`);
         }
       })
       .catch(err => {
         console.error('Error deleting music track:', err);
+        alert(`Error deleting "${track.name}". Check the console for details.`);
       });
   }
 
-  // Socket event listeners
-  setupSocketListeners() {
-    // Music control events from the server (if needed on DM side)
-  }
 }

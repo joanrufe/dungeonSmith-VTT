@@ -71,6 +71,10 @@ These are the major additions and expansions in this fork:
 
 **Effects tool** - Spawn transparent area-effect overlays directly on the canvas as standard tokens. Choose from Square, Circle, Cone, or Line shapes. Twelve quick-select damage-type colors (Fire, Ice, Lightning, Acid, Poison, Thunder, Necrotic, Radiant, Force, Psychic, Fog, Darkness) plus a custom color picker. Size slider runs from 5 ft to 100 ft in 5 ft steps. Enable Breathing to animate the fill opacity in a slow pulse using SVG SMIL animation. Effects spawn centered on the viewport at a z-index above all other tokens and can be moved, scaled, and rotated like any token. Clicking an effect that sits over an interactive token selects the token beneath instead.
 
+**Token lock** - Press `L` to lock a selected token. Locked tokens show a red outline, cannot be moved or resized by anyone, but remain selectable and deletable. Press `L` again to unlock. Lock state persists with the scene.
+
+**Player Files** - A player-accessible media library at `/player-files`. Players can browse and double-click any file to download it. A **DM Mode** toggle (requires DM password) unlocks upload, file deletion, and folder creation — without needing the full DM view. DM password is validated once per session and stored only in memory.
+
 ---
 
 ## Installation
@@ -110,6 +114,7 @@ The server starts on port `3000` by default.
 Default URLs:
 
 - Player view: `http://localhost:3000`
+- Player Files: `http://localhost:3000/player-files`
 - DM view: `http://localhost:3000/dm`
 - Media library: `http://localhost:3000/files`
 
@@ -130,6 +135,7 @@ Default URLs:
 - Move allowed tokens, pan/zoom, ping the scene, and use ruler mode
 - Roll dice, place private sticky notes, and use private local effects
 - Collapse initiative and use the player help controls
+- Browse and download files from the Player Files library (`/player-files`)
 
 ### DM View
 
@@ -148,11 +154,21 @@ Open `/files` to upload and organize files.
 - PDFs and text documents display as icons.
 - Use the Passwords tab to update DM/player passwords.
 
+### Player Files
+
+Open `/player-files` for the player-facing media library.
+
+- Double-click any file to download it.
+- Click **DM Mode** and enter the DM password to unlock upload, delete, and folder management.
+- DM Mode stays active until you toggle it off or refresh the page.
+- Shift-click a file card (in DM Mode) to delete it.
+
 ### Common DM Shortcuts
 
 - `Delete` - Delete selected token
 - `H` - Hide/show selected token from players
 - `I` - Toggle whether players can move selected token
+- `L` - Lock/unlock selected token (red outline, blocks movement and resize)
 - `[` / `]` - Move selected token down/up in layer order
 - `Ctrl+D` - Duplicate selected token
 - `Ctrl+Click` - Add token to selection (group select)
@@ -196,6 +212,7 @@ For both:
 │   ├── dm.html
 │   ├── index.html
 │   ├── files.html
+│   ├── player-files.html
 │   ├── media/
 │   ├── music/
 │   └── uploads/

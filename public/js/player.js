@@ -71,13 +71,10 @@ socket.on('sceneData', (scene) => {
 
 // Function to render a scene
 function renderScene(scene) {
-  const visibleTokens = scene.tokens.filter(token => !token.hidden);
-  const sceneCopy = Object.assign({}, scene, { tokens: visibleTokens });
-  sceneRenderer.renderScene(sceneCopy);
-
-  visibleTokens.forEach((token) => {
-    tokenManager.setupTokenInteractions(token);
-  });
+  sceneRenderer.renderScene(scene);
+  scene.tokens
+    .filter(t => !t.hidden)
+    .forEach(token => tokenManager.setupTokenInteractions(token));
 }
 
 // Handle token updates from the server
@@ -307,12 +304,14 @@ function buildPlayerGrid(size, gridType = 'square') {
   if (playerGridCanvas) playerGridCanvas.remove();
   playerGridCanvas = document.createElement('canvas');
   playerGridCanvas.id = 'player-grid-canvas';
+  const w = window.innerWidth * 2;
+  const h = window.innerHeight * 2;
   playerGridCanvas.style.cssText = `
     position:absolute; top:0; left:0;
     pointer-events:none; z-index:1; opacity:.35;
-    width:6000px; height:6000px;`;
-  playerGridCanvas.width  = 6000;
-  playerGridCanvas.height = 6000;
+    width:${w}px; height:${h}px;`;
+  playerGridCanvas.width  = w;
+  playerGridCanvas.height = h;
   drawPlayerGrid(size, gridType);
   sceneContainer.appendChild(playerGridCanvas);
 }

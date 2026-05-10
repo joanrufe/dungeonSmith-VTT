@@ -155,8 +155,18 @@ export class SceneRenderer {
     element.style.zIndex = token.zIndex || 0;
     element.dataset.tokenId = token.tokenId;
 
+    if (token.isPaintTile) {
+      element.classList.add('paint-tile-el');
+      element.style.pointerEvents = 'none';
+    }
+
     if (this.isDM && token.hidden) {
       element.style.opacity = '0.5';
+    }
+
+    if (token.locked) {
+      element.style.outline = '2px solid #ff3333';
+      element.style.outlineOffset = '1px';
     }
 
     // Disable default browser dragging
@@ -215,6 +225,8 @@ export class SceneRenderer {
       element.style.height = `${token.height * this.scale}px`;
       element.style.transform = `rotate(${token.rotation}deg)`;
       element.style.zIndex = token.zIndex || 0;
+      element.style.outline       = token.locked ? '2px solid #ff3333' : '';
+      element.style.outlineOffset = token.locked ? '1px' : '';
 
       if (this.isDM && token.hidden) {
         element.style.opacity = '0.5';
