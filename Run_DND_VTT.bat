@@ -42,7 +42,7 @@ echo.
 echo  Server starting at http://localhost:%VTT_PORT%
 echo  DM View:      http://localhost:%VTT_PORT%/dm
 echo  Player View:  http://localhost:%VTT_PORT%
-echo  Files:        http://localhost:%VTT_PORT%/files
+echo  Files:        http://localhost:%VTT_PORT%/dmadmin
 echo.
 echo  The DM and Player passwords will be shown in this window.
 echo.

@@ -26,7 +26,7 @@ MUSIC_DIR = PUBLIC_DIR / "music"
 NOTES_FILE = DATA_DIR / "sticky-notes.json"
 
 DEFAULT_SECRETS = {
-    "DM_PASSWORD": "CODE",
+    "DM_PASSWORD": "DMCODE",
     "PLAYER_PASSWORD": "PLAY",
 }
 
@@ -268,7 +268,7 @@ def redirect_static_html_names():
     if request.path == "/dm.html":
         return redirect("/dm")
     if request.path == "/files.html":
-        return redirect("/files")
+        return redirect("/dmadmin")
     if request.path == "/player-files.html":
         return redirect("/player-files")
     return None
@@ -323,7 +323,7 @@ def dm_page():
     return send_from_directory(PUBLIC_DIR, "dm.html")
 
 
-@app.get("/files")
+@app.get("/dmadmin")
 def files_page():
     if not require_dm():
         return redirect("/dm-login")

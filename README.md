@@ -37,7 +37,7 @@ These are the major additions and expansions in this fork:
 
 **Expanded DM toolbar and floating panels** - DM tools live in draggable panels with a right-side tray for Initiative, Paint, Effects, Dice, Music, and Notes.
 
-**Media Library** - Organize reusable media in folders from `/files`. Upload images, videos, PDFs, and text documents. Images preview as thumbnails; videos/documents show file icons. Shift-click downloads files, and double-clicking images/videos adds them to the active scene.
+**Media Library** - Organize reusable media in folders from `/dmadmin`. Upload images, videos, PDFs, and text documents. Images preview as thumbnails; videos/documents show file icons. Shift-click downloads files, and double-clicking images/videos adds them to the active scene.
 
 **Main-area media drag upload** - Drop files directly into the media library grid area, not only the sidebar drop zone.
 
@@ -79,15 +79,21 @@ These are the major additions and expansions in this fork:
 
 ## Installation
 
-### Requirements
+### Easy Install (no Python required)
 
-- Python 3.8 or newer
+Double-click `runEmbedded.bat`.
 
-### Setup
+On first run it downloads a self-contained Python runtime (~30 MB), installs dependencies, and launches the server automatically. Nothing needs to be installed on your machine beforehand. Subsequent runs start instantly using the cached runtime.
 
-Double-click `Run_DND_VTT.bat` — it creates a virtual environment and installs dependencies automatically on first run.
+> Internet access is required on the first run only.
 
-To install manually:
+### virual Environment (Python already installed)
+
+**Requirements:** Python 3.8 or newer
+
+On Windows Double-click `runVirtualEnv.bat`.
+
+Manual Install:
 
 ```sh
 python -m venv .venv
@@ -95,15 +101,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### Start
-
-Double-click:
-
-```bat
-Run_DND_VTT.bat
-```
-
-Or run directly:
+Then start the server:
 
 ```sh
 python app.py
@@ -116,7 +114,14 @@ Default URLs:
 - Player view: `http://localhost:3000`
 - Player Files: `http://localhost:3000/player-files`
 - DM view: `http://localhost:3000/dm`
-- Media library: `http://localhost:3000/files`
+- DM Admin/Files: `http://localhost:3000/dmadmin`
+
+Default Passwords: 
+
+DM password: `DMCODE`
+Player password: `PLAY`
+
+Passwords are changed in DM Admin area
 
 ---
 
@@ -145,9 +150,9 @@ Open `/dm` to manage scenes, tokens, music, initiative, dice, paint tools, area 
 
 Players open `/` and see the active scene, visible tokens, initiative callouts, dice rolls, music, pings, and their own private sticky notes. A "Please Wait" screen is shown until the DM loads a scene.
 
-### Media Library
+### DM Admin
 
-Open `/files` to upload and organize files.
+Open `/dmadmin` to upload and organize files and change passwords
 
 - Double-click an image or video to add it to the active scene.
 - Shift-click any file to download it.
