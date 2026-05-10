@@ -65,7 +65,7 @@ These are the major additions and expansions in this fork:
 
 **Token lock** - Press `L` to lock a selected token. Locked tokens show a red outline, cannot be moved or resized by anyone, but remain selectable and deletable.
 
-**Player Files** - A player-accessible media library at `/player-files`. Players can browse and double-click any file to download it. A **DM Mode** toggle (requires DM password) unlocks upload, file deletion, and folder creation — without needing the full DM view. DM password is validated once per session and stored only in memory.
+**Player Files** - A player-accessible media library at `/player-files`. Players can browse and double-click any file to download it. A **DM Mode** toggle (requires DM password) unlocks upload, file deletion.
 
 ---
 
