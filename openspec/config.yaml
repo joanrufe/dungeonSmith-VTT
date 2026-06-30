@@ -1,0 +1,58 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Python 3.8+ (Flask>=3<4, Flask-SocketIO>=5.3<6, python-socketio>=5.11<6,
+    Werkzeug>=3<4), async_mode="threading". Single monolithic `app.py` (~950 lines,
+    port 3000, env VTT_PORT). No package.json; Node files are deprecated reference only.
+  Frontend: framework-less vanilla JS/HTML/CSS in `public/`, served statically by Flask
+    (static_url_path=""). Vendored libs in `public/lib/` (incl. 3D dice, socket.io.min.js).
+  Architecture: server-authoritative. SceneStore holds scenes in memory + persists to
+    `data/scenes/{id}.json`. Mutations flow through Socket.IO events (updateToken,
+    addToken, removeToken, addTokenFromLibrary, toggleGrid, setBgColor, updateInitiative).
+    Server mutates + rebroadcasts to all clients.
+  Testing: NONE. No pytest/unittest, no ruff/mypy, no CI, no pre-commit. Only quality
+    gate is `python -m py_compile app.py`. Do NOT assume test config exists.
+  Style: conventional-ish commits, no enforcement. .gitkeep + negated ignores for
+    runtime dirs. Fork of MiniVTT, GPL-3.0.
+
+strict_tdd: false
+
+testing:
+  runner: none
+  command: ""
+  layers:
+    unit: false
+    integration: false
+    e2e: false
+  coverage: false
+  quality:
+    linter: false
+    type_checker: false
+    formatter: false
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Scope to the active scene state; do not pull lateral flows (music, initiative, notes) into undo scope without explicit approval
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Preserve existing Socket.IO event payload shapes (frontend parity constraint)
+  design:
+    - Document architecture decisions with rationale
+    - Keep changes server-centric; minimize public/js edits per frontend parity constraint
+    - app.py stays monolithic by design; do not propose a controllers/services split
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing code patterns in app.py
+    - Do not edit deprecated Node files (server.js, routes.js, socketHandler.js, controllers/, models/)
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: "python -m py_compile app.py"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
