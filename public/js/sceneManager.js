@@ -397,6 +397,16 @@ export class SceneManager {
       // Duplicate the selected token
       event.preventDefault(); // Prevent default browser action
       this.duplicateSelectedToken();
+    } else if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      if (this.currentScene) {
+        this.socket.emit('undo', { sceneId: this.currentScene.sceneId });
+      }
+    } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      if (this.currentScene) {
+        this.socket.emit('redo', { sceneId: this.currentScene.sceneId });
+      }
     } else if (this.hasSelection() && event.key.toLowerCase() === 'i') {
       this.forEachSelectedTokenId(tokenId => this.toggleTokenMovableByPlayers(tokenId));
     } else if (this.hasSelection() && event.key.toLowerCase() === 'l') {

@@ -4,6 +4,7 @@ import os
 import random
 import re
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -230,12 +231,137 @@ class SceneStore:
             if token.get("tokenId") == token_id:
                 removed = tokens.pop(index)
                 self.save_scene(scene)
-                self.delete_upload_if_unused(removed.get("imageUrl"))
                 return removed
         return None
 
 
+class SceneHistory:
+    """Server-side undo/redo of token-property mutations, per scene.
+
+    In-memory only (lost on restart). One pending entry per scene coalesces
+    bursts (e.g. a 60Hz drag) into a single undo step via a ~300ms inactivity
+    window. Snapshot = deep copy of scene["tokens"] via json round-trip.
+    All state is guarded by a single threading.Lock (async_mode="threading").
+    """
+
+    MAX_DEPTH = 50
+    COALESCE_WINDOW_MS = 300
+
+    def __init__(self, store):
+        self._store = store
+        self._lock = threading.Lock()
+        self._scenes = {}
+
+    def _ensure_scene(self, scene_id):
+        if scene_id not in self._scenes:
+            self._scenes[scene_id] = {"undo": [], "redo": [], "pending": None}
+        return self._scenes[scene_id]
+
+    def before_mutation(self, scene_id):
+        now = time.time() * 1000
+        with self._lock:
+            self._ensure_scene(scene_id)
+            self._sweep_all_locked()
+            entry = self._scenes[scene_id]
+            pending = entry["pending"]
+            if pending is not None and (now - pending["last_touch_ms"]) < self.COALESCE_WINDOW_MS:
+                pending["last_touch_ms"] = now
+                return
+            if pending is not None:
+                self._finalize_pending_locked(scene_id)
+            else:
+                # No pending: a new mutation after undo/redo must clear the
+                # redo stack (standard redo semantics). _finalize_pending_locked
+                # already clears redo when finalizing an expired pending; this
+                # covers the case where pending was None (e.g. right after undo).
+                for redone in entry["redo"]:
+                    for url in redone.get("deleted_image_urls", []):
+                        self._store.delete_upload_if_unused(url)
+                entry["redo"].clear()
+            scene = self._store.scenes.get(scene_id) or self._store.load_scene(scene_id)
+            entry["pending"] = {
+                "before_snapshot": json.loads(json.dumps(scene.get("tokens", []))),
+                "last_touch_ms": now,
+                "deleted_image_urls": [],
+            }
+
+    def record_pending_deletion(self, scene_id, url):
+        if not url:
+            return
+        with self._lock:
+            entry = self._ensure_scene(scene_id)
+            pending = entry["pending"]
+            if pending is not None:
+                pending["deleted_image_urls"].append(url)
+
+    def undo(self, scene_id):
+        with self._lock:
+            self._ensure_scene(scene_id)
+            self._finalize_pending_locked(scene_id)
+            entry = self._scenes[scene_id]
+            if not entry["undo"]:
+                return None
+            scene = self._store.scenes.get(scene_id) or self._store.load_scene(scene_id)
+            current = json.loads(json.dumps(scene.get("tokens", [])))
+            entry["redo"].append({"tokens": current, "deleted_image_urls": []})
+            return entry["undo"].pop()
+
+    def redo(self, scene_id):
+        with self._lock:
+            self._ensure_scene(scene_id)
+            self._finalize_pending_locked(scene_id)
+            entry = self._scenes[scene_id]
+            if not entry["redo"]:
+                return None
+            scene = self._store.scenes.get(scene_id) or self._store.load_scene(scene_id)
+            current = json.loads(json.dumps(scene.get("tokens", [])))
+            entry["undo"].append({"tokens": current, "deleted_image_urls": []})
+            if len(entry["undo"]) > self.MAX_DEPTH:
+                self._evict_oldest_locked(scene_id)
+            return entry["redo"].pop()
+
+    def state(self, scene_id):
+        with self._lock:
+            self._ensure_scene(scene_id)
+            self._sweep_all_locked()
+            entry = self._scenes[scene_id]
+            return (len(entry["undo"]) > 0, len(entry["redo"]) > 0)
+
+    def _finalize_pending_locked(self, scene_id):
+        entry = self._scenes[scene_id]
+        pending = entry["pending"]
+        if pending is None:
+            return
+        entry["pending"] = None
+        for redone in entry["redo"]:
+            for url in redone.get("deleted_image_urls", []):
+                self._store.delete_upload_if_unused(url)
+        entry["redo"].clear()
+        entry["undo"].append({
+            "tokens": pending["before_snapshot"],
+            "deleted_image_urls": pending["deleted_image_urls"],
+        })
+        if len(entry["undo"]) > self.MAX_DEPTH:
+            self._evict_oldest_locked(scene_id)
+
+    def _evict_oldest_locked(self, scene_id):
+        entry = self._scenes[scene_id]
+        if not entry["undo"]:
+            return
+        evicted = entry["undo"].pop(0)
+        for url in evicted.get("deleted_image_urls", []):
+            self._store.delete_upload_if_unused(url)
+
+    def _sweep_all_locked(self):
+        now = time.time() * 1000
+        for scene_id, entry in self._scenes.items():
+            pending = entry["pending"]
+            if pending is not None and (now - pending["last_touch_ms"]) >= self.COALESCE_WINDOW_MS:
+                self._finalize_pending_locked(scene_id)
+
+
 scene_store = SceneStore()
+history = SceneHistory(scene_store)
 secrets = read_secrets()
 
 app = Flask(__name__, static_folder=str(PUBLIC_DIR), static_url_path="")
@@ -790,6 +916,8 @@ def socket_update_token(data):
         allowed = all(key in {"x", "y"} for key in properties.keys())
         if not token or not token.get("movableByPlayers") or not allowed:
             return
+    if is_dm_socket():
+        history.before_mutation(scene_id)
     token, was_hidden, is_hidden = scene_store.update_token(scene_id, token_id, properties)
     if not token:
         return
@@ -804,6 +932,9 @@ def socket_update_token(data):
         emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, to="dm", include_self=False)
     else:
         emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, broadcast=True, include_self=False)
+    if is_dm_socket():
+        can_undo, can_redo = history.state(scene_id)
+        socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
 
 @socketio.on("addToken")
@@ -812,8 +943,11 @@ def socket_add_token(data):
         return
     scene_id = (data or {}).get("sceneId")
     token = (data or {}).get("token")
+    history.before_mutation(scene_id)
     scene_store.add_token(scene_id, token)
     socketio.emit("addToken", {"sceneId": scene_id, "token": token})
+    can_undo, can_redo = history.state(scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
 
 @socketio.on("removeToken")
@@ -822,8 +956,13 @@ def socket_remove_token(data):
         return
     scene_id = (data or {}).get("sceneId")
     token_id = (data or {}).get("tokenId")
-    if scene_store.remove_token(scene_id, token_id):
+    history.before_mutation(scene_id)
+    removed = scene_store.remove_token(scene_id, token_id)
+    if removed is not None:
+        history.record_pending_deletion(scene_id, removed.get("imageUrl"))
         socketio.emit("removeToken", {"sceneId": scene_id, "tokenId": token_id})
+    can_undo, can_redo = history.state(scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
 
 @socketio.on("playTrack")
@@ -932,8 +1071,49 @@ def socket_add_token_from_library(data):
         "movableByPlayers": False,
         "hidden": False,
     }
+    history.before_mutation(scene_store.active_scene_id)
     scene_store.add_token(scene_store.active_scene_id, token)
     socketio.emit("addToken", {"sceneId": scene_store.active_scene_id, "token": token})
+    can_undo, can_redo = history.state(scene_store.active_scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
+
+
+def _apply_snapshot_and_broadcast(scene_id, snapshot):
+    scene = scene_store.scenes.get(scene_id) or scene_store.load_scene(scene_id)
+    scene["tokens"] = snapshot["tokens"]
+    scene_store.save_scene(scene)
+    socketio.emit("sceneData", scene, to="dm")
+    filtered = dict(scene)
+    filtered["tokens"] = [t for t in scene.get("tokens", []) if not t.get("hidden")]
+    socketio.emit("sceneData", filtered, to="player")
+    can_undo, can_redo = history.state(scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
+
+
+@socketio.on("undo")
+def socket_undo(data):
+    if not is_dm_socket():
+        return
+    scene_id = scene_store.active_scene_id
+    if not scene_id:
+        return
+    snapshot = history.undo(scene_id)
+    if snapshot is None:
+        return
+    _apply_snapshot_and_broadcast(scene_id, snapshot)
+
+
+@socketio.on("redo")
+def socket_redo(data):
+    if not is_dm_socket():
+        return
+    scene_id = scene_store.active_scene_id
+    if not scene_id:
+        return
+    snapshot = history.redo(scene_id)
+    if snapshot is None:
+        return
+    _apply_snapshot_and_broadcast(scene_id, snapshot)
 
 
 def main():

@@ -89,6 +89,8 @@
         <tr><td><kbd>Shift Click</kbd></td><td>Select multiple tokens</td></tr>
         <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>Rotate selected token left / right</td></tr>
         <tr><td><kbd>Shift+Q</kbd> / <kbd>Shift+E</kbd></td><td>Fine rotate selected token</td></tr>
+        <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo last action</td></tr>
+        <tr><td><kbd>Ctrl+Shift+Z</kbd></td><td>Redo last undone action</td></tr>
         <tr><th colspan="2">View</th></tr>
         <tr><td><kbd>T</kbd></td><td>Toggle toolbar</td></tr>
         <tr><td><kbd>Scroll</kbd></td><td>Zoom in / out</td></tr>
@@ -105,6 +107,8 @@
 
   <!-- ═══ RIGHT TOOLS TRAY (buttons only, slides in from right) ═══ -->
   <div id="dm-tool-tray" class="tray-hidden">
+    <button id="undo-btn" class="tray-btn" title="Undo (Ctrl+Z)" disabled><i class="fa-solid fa-rotate-left"></i><span>Undo</span></button>
+    <button id="redo-btn" class="tray-btn" title="Redo (Ctrl+Shift+Z)" disabled><i class="fa-solid fa-rotate-right"></i><span>Redo</span></button>
     <button id="init-toggle-btn"  class="tray-btn" title="Initiative Tracker"><i class="fa-solid fa-khanda"></i><span>Init</span></button>
     <button id="paint-toggle-btn" class="tray-btn" title="Paint Tools"><i class="fa-solid fa-paintbrush"></i><span>Paint</span></button>
     <button id="ae-toggle-btn"    class="tray-btn" title="Effects"><i class="fa-solid fa-bullseye"></i><span>Effects</span></button>

@@ -119,6 +119,36 @@
       trayBtn.classList.toggle('active-tool-btn', !hidden);
     });
 
+    // ── Undo / Redo one-shot buttons ──────────────────────
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    if (undoBtn) {
+      undoBtn.addEventListener('click', () => {
+        const sm = window.VTT_DM && window.VTT_DM.sceneManager;
+        if (sm && sm.currentScene) {
+          sm.socket.emit('undo', { sceneId: sm.currentScene.sceneId });
+        }
+      });
+    }
+    if (redoBtn) {
+      redoBtn.addEventListener('click', () => {
+        const sm = window.VTT_DM && window.VTT_DM.sceneManager;
+        if (sm && sm.currentScene) {
+          sm.socket.emit('redo', { sceneId: sm.currentScene.sceneId });
+        }
+      });
+    }
+
+    // ── Button state from server (wait for dm.js to expose VTT_DM) ──
+    function bindUndoRedoState() {
+      if (!window.VTT_DM) { setTimeout(bindUndoRedoState, 150); return; }
+      window.VTT_DM.socket.on('undoRedoState', ({ canUndo, canRedo }) => {
+        if (undoBtn) undoBtn.disabled = !canUndo;
+        if (redoBtn) redoBtn.disabled = !canRedo;
+      });
+    }
+    bindUndoRedoState();
+
     // ── Panel pop-out toggles from tray ───────────────────
     setupPanelToggle('init-toggle-btn',  'initiative-panel');
     setupPanelToggle('paint-toggle-btn', 'paint-panel');
