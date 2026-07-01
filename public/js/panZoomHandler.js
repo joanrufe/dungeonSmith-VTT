@@ -52,14 +52,16 @@ export class PanZoomHandler {
   }
 
   onMouseDown(event) {
-    if (event.button === 1) {
-      this.isPanning = true;
-      this.startX = event.clientX;
-      this.startY = event.clientY;
-      event.preventDefault();
-      document.addEventListener('mousemove', this._onMove);
-      document.addEventListener('mouseup', this._onUp);
-    }
+    const isMiddleDrag = event.button === 1;
+    const isCtrlLeftDrag = event.button === 0 && (event.ctrlKey || event.metaKey);
+    if (!isMiddleDrag && !isCtrlLeftDrag) return;
+
+    this.isPanning = true;
+    this.startX = event.clientX;
+    this.startY = event.clientY;
+    event.preventDefault();
+    document.addEventListener('mousemove', this._onMove);
+    document.addEventListener('mouseup', this._onUp);
   }
 
   onMouseMove(event) {
@@ -73,12 +75,11 @@ export class PanZoomHandler {
   }
 
   onMouseUp(event) {
-    if (event.button === 1) {
-      this.isPanning = false;
-      event.preventDefault();
-      document.removeEventListener('mousemove', this._onMove);
-      document.removeEventListener('mouseup', this._onUp);
-    }
+    if (!this.isPanning) return;
+    this.isPanning = false;
+    event.preventDefault();
+    document.removeEventListener('mousemove', this._onMove);
+    document.removeEventListener('mouseup', this._onUp);
   }
 
   /** Apply a view state (e.g. from DM snap-to-view). */

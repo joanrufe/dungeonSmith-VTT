@@ -25,6 +25,7 @@
   function bindTokenTool(sc) {
     sc.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      if (e.ctrlKey || e.metaKey) return; // Ctrl/Cmd + drag pans the camera
       if (window.VTT_ACTIVE_PAINT_TOOL) return;
       if (window.VTT_ACTIVE_RULER_TOOL) return;
 
@@ -132,6 +133,11 @@
             properties: { x: movingToken.x, y: movingToken.y },
           });
         });
+
+        // Players see fog; keep it in sync while dragging (server does not echo back to self)
+        if (!ctx.isDM) {
+          ctx.renderer.drawFog();
+        }
       }
 
       function onUp(ev) {
@@ -185,17 +191,55 @@
       const max      = parseInt(document.getElementById('tsp-hp-max').value);
       const cond     = document.getElementById('tsp-cond-text').value.trim();
       const fontSize = parseInt(document.getElementById('tsp-cond-size').value) || 22;
+      const radiusCells = parseFloat(document.getElementById('tsp-vision-radius').value);
+      const isMap    = document.getElementById('tsp-is-map').checked;
+      const gridSize = window.VTT_GRID_SIZE || 60;
+
       token.hpCurrent        = isNaN(cur) ? null : cur;
       token.hpMax            = isNaN(max) ? null : max;
       token.conditionText    = cond || null;
       token.conditionColor   = cond ? document.getElementById('tsp-cond-color').value : null;
       token.conditionFontSize = cond ? fontSize : null;
+      token.visionRadius     = isNaN(radiusCells) ? 0 : Math.max(0, radiusCells) * gridSize;
+      token.isMap            = isMap;
+
+      /** @type {Record<string,any>} */
+      const properties = {
+        hpCurrent:       token.hpCurrent,
+        hpMax:           token.hpMax,
+        conditionText:   token.conditionText,
+        conditionColor:  token.conditionColor,
+        conditionFontSize: token.conditionFontSize,
+        visionRadius:    token.visionRadius,
+        isMap:           token.isMap,
+      };
+
+      // When marking as a map token, lock it and send it to the background
+      // z-layer. When unmarking, restore it as a normal token on top.
+      if (isMap) {
+        token.locked = true;
+        token.zIndex = -1000;
+        properties.locked = true;
+        properties.zIndex = -1000;
+      } else {
+        token.locked = false;
+        const maxZ = Math.max(0, ...ctx.scene.tokens.map(t => t.zIndex || 0));
+        token.zIndex = maxZ + 1;
+        properties.locked = false;
+        properties.zIndex = token.zIndex;
+      }
 
       ctx.renderer.updateTokenElement(token);
+
+      // Redraw fog if the vision source changed while on the player view
+      if (!ctx.isDM) {
+        ctx.renderer.drawFog();
+      }
+
       ctx.socket.emit('updateToken', {
         sceneId:    token.sceneId,
         tokenId:    _statusTokenId,
-        properties: { hpCurrent: token.hpCurrent, hpMax: token.hpMax, conditionText: token.conditionText, conditionColor: token.conditionColor, conditionFontSize: token.conditionFontSize },
+        properties,
       });
       popup.style.display = 'none';
     });
@@ -219,6 +263,11 @@
     document.getElementById('tsp-cond-text').value   = token.conditionText   || '';
     document.getElementById('tsp-cond-size').value   = token.conditionFontSize || 22;
     document.getElementById('tsp-cond-color').value  = token.conditionColor  || '#ffffff';
+
+    const gridSize = window.VTT_GRID_SIZE || 60;
+    const radiusCells = token.visionRadius ? token.visionRadius / gridSize : 0;
+    document.getElementById('tsp-vision-radius').value = radiusCells || '';
+    document.getElementById('tsp-is-map').checked = !!token.isMap;
 
     const popup = document.getElementById('token-status-popup');
     popup.style.display = 'block';

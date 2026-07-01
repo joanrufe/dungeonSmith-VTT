@@ -95,6 +95,7 @@
         <tr><td><kbd>T</kbd></td><td>Toggle toolbar</td></tr>
         <tr><td><kbd>Scroll</kbd></td><td>Zoom in / out</td></tr>
         <tr><td><kbd>Middle-click drag</kbd></td><td>Pan the scene</td></tr>
+        <tr><td><kbd>Ctrl + drag</kbd></td><td>Pan the scene</td></tr>
         <tr><td><kbd>Ruler</kbd></td><td>Measure distance at 5 ft per grid cell</td></tr>
         <tr><th colspan="2">Scenes</th></tr>
         <tr><td><kbd>Shift+D</kbd></td><td>Delete current scene</td></tr>
@@ -343,6 +344,16 @@
       <input type="text" id="tsp-cond-text" placeholder="e.g. Poisoned">
       <input type="number" id="tsp-cond-size" value="22" min="6" max="72" style="width:42px">
       <input type="color" id="tsp-cond-color" value="#ffffff">
+    </div>
+    <div class="tsp-row">
+      <label>Vision</label>
+      <input type="number" id="tsp-vision-radius" placeholder="0" min="0" step="1" style="width:60px" title="Vision radius in grid cells (0 = no vision)">
+      <span style="font-size:11px;opacity:0.7;margin-left:4px;">cells</span>
+    </div>
+    <div class="tsp-row">
+      <label>Map</label>
+      <input type="checkbox" id="tsp-is-map" title="Mark as background map token (locks token, sends to background)">
+      <span style="font-size:11px;opacity:0.7;margin-left:4px;">Background map</span>
     </div>
     <div class="tsp-btns">
       <button id="tsp-apply">Apply</button>

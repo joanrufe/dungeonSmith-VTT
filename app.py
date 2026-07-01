@@ -44,6 +44,8 @@ class TokenDict(_TokenDictRequired, total=False):
     conditionText: Optional[str]
     conditionColor: Optional[str]
     conditionFontSize: Optional[int]
+    isMap: bool
+    visionRadius: float
 
 
 class _SceneDictRequired(TypedDict):
@@ -275,6 +277,10 @@ class SceneStore:
         for token in scene.get("tokens", []):
             if token.get("tokenId") == token_id:
                 was_hidden = bool(token.get("hidden"))
+                if "visionRadius" in properties:
+                    properties["visionRadius"] = max(0.0, float(properties["visionRadius"]))
+                if "isMap" in properties:
+                    properties["isMap"] = bool(properties["isMap"])
                 token.update(properties or {})
                 self.save_scene(scene)
                 return token, was_hidden, bool(token.get("hidden"))

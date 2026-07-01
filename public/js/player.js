@@ -91,6 +91,9 @@ socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
     // Update the DOM element
     sceneRenderer.updateTokenElement(token);
 
+    // Redraw fog: token position or vision radius may have changed
+    sceneRenderer.drawFog();
+
     // Only re-setup interactions when interaction-relevant props change
     if ('movableByPlayers' in properties || 'hidden' in properties) {
       tokenManager.setupTokenInteractions(token);
@@ -107,6 +110,9 @@ socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
 
       // Setup interactions
       tokenManager.setupTokenInteractions(token);
+
+      // New token may be a vision source
+      sceneRenderer.drawFog();
     }
   }
 });
@@ -130,6 +136,9 @@ socket.on('addToken', ({ sceneId, token }) => {
   } else {
     tokenManager.toggleHoverShadow(token, false);
   }
+
+  // New token may be a vision source
+  sceneRenderer.drawFog();
 });
 
 // Handle removal of tokens
@@ -146,6 +155,9 @@ socket.on('removeToken', ({ sceneId, tokenId }) => {
   if (element && element.parentNode === sceneContainer) {
     sceneContainer.removeChild(element);
   }
+
+  // Removed token may have been a vision source
+  sceneRenderer.drawFog();
 });
 
 // === Music Handling Code ===

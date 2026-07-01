@@ -65,6 +65,12 @@ export class SceneRenderer {
     this.tokens.forEach((token) => {
       this.renderToken(token);
     });
+
+    // Players get a fog overlay canvas; DM is exempt
+    if (!this.isDM) {
+      this._ensureFogCanvas();
+      this.drawFog();
+    }
   }
 
   /** Called by the BG color picker and by the setBgColor socket event. */
@@ -218,6 +224,11 @@ export class SceneRenderer {
       playerGridCanvas.style.transformOrigin = '0 0';
       playerGridCanvas.style.transform = `translate(${_phaseX}px, ${_phaseY}px) scale(${this.scale})`;
     }
+
+    // Redraw fog after any pan/zoom/token move (players only)
+    if (!this.isDM) {
+      this.drawFog();
+    }
   }
 
   // Update a single token element's position and size
@@ -271,5 +282,129 @@ export class SceneRenderer {
   // and controlled by the DM's BG color picker.
   setBackgroundBasedOnTokens() {
     // No-op – background controlled by BG color picker
+  }
+
+  // ── Fog of War overlay (player view only) ───────────────────────────────
+
+  /**
+   * Create (or return) the full-viewport fog canvas appended to #scene-container.
+   * Called once per renderScene; position/size is maintained by _resizeFogCanvas
+   * and the ResizeObserver set up in _attachFogResizeObserver.
+   * @returns {HTMLCanvasElement}
+   */
+  _ensureFogCanvas() {
+    let canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById('fog-canvas'));
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.id = 'fog-canvas';
+      canvas.style.cssText = [
+        'position:absolute',
+        'top:0',
+        'left:0',
+        'pointer-events:none',
+        'z-index:100',
+      ].join(';');
+      this.container.appendChild(canvas);
+      this._attachFogResizeObserver(canvas);
+    }
+    this._resizeFogCanvas(canvas);
+    return canvas;
+  }
+
+  /**
+   * Size the canvas to match its container's current dimensions.
+   * Must be called whenever the viewport or container changes size.
+   * @param {HTMLCanvasElement} canvas
+   */
+  _resizeFogCanvas(canvas) {
+    const w = this.container.clientWidth  || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+
+  /**
+   * Attach a ResizeObserver on #scene-container so the fog canvas stays
+   * full-viewport when the browser window resizes. (Task 3.4)
+   * @param {HTMLCanvasElement} canvas
+   */
+  _attachFogResizeObserver(canvas) {
+    if (!window.ResizeObserver) return;
+    if (this._fogResizeObserver) this._fogResizeObserver.disconnect();
+    this._fogResizeObserver = new ResizeObserver(() => {
+      this._resizeFogCanvas(canvas);
+      this.drawFog();
+    });
+    this._fogResizeObserver.observe(this.container);
+  }
+
+  /**
+   * Draw the fog overlay:
+   * 1. Fill the entire canvas with semi-opaque dark fog.
+   * 2. Punch `destination-out` radial gradient holes for every vision source:
+   *    visible, non-map, non-paint, non-area-effect token with visionRadius > 0.
+   *    Coordinates are transformed from world-space to screen-space via
+   *    the renderer's current pan/zoom state. (Task 3.2)
+   */
+  drawFog() {
+    const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById('fog-canvas'));
+    if (!canvas) return;
+    this._resizeFogCanvas(canvas);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Fog only makes sense when the current scene has at least one vision
+    // source. Cover/splash scenes without vision tokens should remain fully
+    // visible.
+    const visionSources = this.tokens.filter((token) => {
+      if (token.isMap) return false;
+      if (token.isPaintTile) return false;
+      if (token.isAreaEffect) return false;
+      const radius = token.visionRadius;
+      return radius && radius > 0;
+    });
+    if (visionSources.length === 0) return;
+
+    // Step 1: paint the fog layer
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Step 2: cut vision holes
+    ctx.globalCompositeOperation = 'destination-out';
+
+    for (const token of visionSources) {
+      // Skip map tokens, paint tiles, area effects, and tokens with no vision
+      if (token.isMap)        continue;
+      if (token.isPaintTile)  continue;
+      if (token.isAreaEffect) continue;
+      const radius = token.visionRadius;
+      if (!radius || radius <= 0) continue;
+
+      // World-space token centre → screen-space
+      const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
+      const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
+      const sr = radius * this.scale; // scaled radius
+
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, sr);
+      grad.addColorStop(0,   'rgba(0,0,0,1)');   // fully transparent hole at centre
+      grad.addColorStop(0.75,'rgba(0,0,0,0.9)'); // still mostly clear
+      grad.addColorStop(1,   'rgba(0,0,0,0)');   // fade to fog at edge
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, sr, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    // Restore default composite for future draws
+    ctx.globalCompositeOperation = 'source-over';
   }
 }

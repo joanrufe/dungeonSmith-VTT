@@ -24,6 +24,8 @@
  * @property {string|null}  [conditionText]
  * @property {string|null}  [conditionColor]
  * @property {number|null}  [conditionFontSize]
+ * @property {boolean} [isMap]
+ * @property {number}  [visionRadius]
  */
 
 /**
@@ -798,6 +800,11 @@ export class SceneManager {
 
       // Update the DOM element
       this.sceneRenderer.updateTokenElement(token);
+
+      // Fog depends on token position and vision radius, so redraw it on every update
+      if (!this.isDM) {
+        this.sceneRenderer.drawFog();
+      }
 
       // Only re-setup interactions when interaction-relevant props change
       if ('movableByPlayers' in properties || 'hidden' in properties || 'locked' in properties) {

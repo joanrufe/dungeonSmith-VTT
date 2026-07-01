@@ -58,6 +58,9 @@ button:hover {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+  /* Create a stacking context so negative-z children (map tokens at zIndex:-1000,
+     paint tiles at zIndex:-10) stack predictably and remain interactive. */
+  z-index: 0;
 }
 
 .token {
