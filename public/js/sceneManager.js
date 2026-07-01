@@ -1,5 +1,50 @@
 // public/js/sceneManager.js
 
+/**
+ * @typedef {Object} TokenDict
+ * @property {string}  tokenId
+ * @property {string}  sceneId
+ * @property {string}  imageUrl
+ * @property {string}  mediaType          - "image" | "video" | "pdf" | "text"
+ * @property {number}  x
+ * @property {number}  y
+ * @property {number}  width
+ * @property {number}  height
+ * @property {number}  rotation
+ * @property {number}  zIndex
+ * @property {boolean} movableByPlayers
+ * @property {boolean} hidden
+ * @property {string}  [name]
+ * @property {boolean} [locked]
+ * @property {boolean} [isPaintTile]
+ * @property {boolean} [isAreaEffect]
+ * @property {string}  [areaShape]
+ * @property {number|null}  [hpCurrent]
+ * @property {number|null}  [hpMax]
+ * @property {string|null}  [conditionText]
+ * @property {string|null}  [conditionColor]
+ * @property {number|null}  [conditionFontSize]
+ */
+
+/**
+ * @typedef {Object} SceneDict
+ * @property {string}      sceneId
+ * @property {string}      sceneName
+ * @property {TokenDict[]} tokens
+ * @property {number}      [order]
+ */
+
+/**
+ * @typedef {Object} StickyNoteDict
+ * @property {string} id
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ * @property {string} color   - "yellow" | "pink" | "blue" | "green"
+ * @property {string} text
+ */
+
 export class SceneManager {
   constructor(socket, sceneRenderer, tokenManager, sceneContainer) {
     this.socket = socket;

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import mimetypes
 import os
@@ -7,10 +9,69 @@ import shutil
 import threading
 import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union, TypedDict
 
-from flask import Flask, jsonify, redirect, request, send_from_directory, session
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory, session
 from flask_socketio import SocketIO, emit, join_room
 from werkzeug.utils import secure_filename
+
+
+# ── Domain types ──────────────────────────────────────────────────────────────
+
+class _TokenDictRequired(TypedDict):
+    tokenId: str
+    sceneId: str
+    imageUrl: str
+    mediaType: str           # "image" | "video" | "pdf" | "text"
+    x: float
+    y: float
+    width: float
+    height: float
+    rotation: float
+    zIndex: int
+    movableByPlayers: bool
+    hidden: bool
+
+
+class TokenDict(_TokenDictRequired, total=False):
+    name: str
+    locked: bool
+    isPaintTile: bool
+    isAreaEffect: bool
+    areaShape: str
+    hpCurrent: Optional[int]
+    hpMax: Optional[int]
+    conditionText: Optional[str]
+    conditionColor: Optional[str]
+    conditionFontSize: Optional[int]
+
+
+class _SceneDictRequired(TypedDict):
+    sceneId: str
+    sceneName: str
+    tokens: List[TokenDict]
+
+
+class SceneDict(_SceneDictRequired, total=False):
+    order: int
+
+
+class _StickyNoteDictRequired(TypedDict):
+    id: str
+    x: float
+    y: float
+    w: float
+    h: float
+    color: str               # "yellow" | "pink" | "blue" | "green"
+    text: str
+
+
+StickyNoteDict = _StickyNoteDictRequired  # all fields present when persisted
+
+# ── Type aliases ──────────────────────────────────────────────────────────────
+
+SceneId = str
+RouteReturn = Union[Response, str, Tuple[Any, int]]
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -40,11 +101,11 @@ MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS | DOC_EXTS
 MUSIC_EXTS = {".mp3", ".wav", ".ogg", ".m4a", ".flac"}
 
 
-def now_ms():
+def now_ms() -> str:
     return str(int(time.time() * 1000))
 
 
-def parse_secrets(raw):
+def parse_secrets(raw: str) -> Dict[str, str]:
     trimmed = raw.strip()
     if "=" not in trimmed:
         secrets = dict(DEFAULT_SECRETS)
@@ -63,7 +124,7 @@ def parse_secrets(raw):
     return secrets
 
 
-def format_secrets(secrets):
+def format_secrets(secrets: Dict[str, str]) -> str:
     return "\n".join([
         "# Passwords can be edited here or from the Media Library password tab.",
         "# These values stay server-side and are never sent to browser JavaScript.",
@@ -73,7 +134,7 @@ def format_secrets(secrets):
     ])
 
 
-def ensure_secret_storage():
+def ensure_secret_storage() -> None:
     SECRET_DIR.mkdir(parents=True, exist_ok=True)
     if not SECRET_FILE.exists() and LEGACY_SECRET_FILE.exists():
         try:
@@ -83,7 +144,7 @@ def ensure_secret_storage():
             LEGACY_SECRET_FILE.unlink(missing_ok=True)
 
 
-def read_secrets():
+def read_secrets() -> Dict[str, str]:
     ensure_secret_storage()
     try:
         return parse_secrets(SECRET_FILE.read_text(encoding="utf-8"))
@@ -93,25 +154,25 @@ def read_secrets():
         return secrets
 
 
-def safe_folder_name(value):
+def safe_folder_name(value: Optional[str]) -> str:
     return re.sub(r"[^a-zA-Z0-9_\- ]", "", value or "").strip()
 
 
-def safe_relative_media_path(url):
+def safe_relative_media_path(url: Optional[str]) -> Optional[str]:
     rel = re.sub(r"^/media/", "", url or "")
     if not rel or ".." in rel or rel.startswith(("/", "\\")):
         return None
     return rel
 
 
-def safe_relative_player_media_path(url):
+def safe_relative_player_media_path(url: Optional[str]) -> Optional[str]:
     rel = re.sub(r"^/player-media/", "", url or "")
     if not rel or ".." in rel or rel.startswith(("/", "\\")):
         return None
     return rel
 
 
-def get_media_type(name):
+def get_media_type(name: str) -> Optional[str]:
     ext = Path(name).suffix.lower()
     if ext in IMAGE_EXTS:
         return "image"
@@ -125,18 +186,18 @@ def get_media_type(name):
 
 
 class SceneStore:
-    def __init__(self):
-        self.active_scene_id = None
-        self.scenes = {}
+    def __init__(self) -> None:
+        self.active_scene_id: Optional[SceneId] = None
+        self.scenes: Dict[SceneId, SceneDict] = {}
         SCENES_DIR.mkdir(parents=True, exist_ok=True)
 
-    def path_for(self, scene_id):
+    def path_for(self, scene_id: SceneId) -> Path:
         return SCENES_DIR / f"{scene_id}.json"
 
-    def add_scene(self, scene):
+    def add_scene(self, scene: SceneDict) -> None:
         self.scenes[scene["sceneId"]] = scene
 
-    def load_scene(self, scene_id):
+    def load_scene(self, scene_id: SceneId) -> SceneDict:
         if scene_id in self.scenes:
             return self.scenes[scene_id]
         path = self.path_for(scene_id)
@@ -144,11 +205,11 @@ class SceneStore:
         self.scenes[scene_id] = scene
         return scene
 
-    def save_scene(self, scene):
+    def save_scene(self, scene: SceneDict) -> None:
         SCENES_DIR.mkdir(parents=True, exist_ok=True)
         self.path_for(scene["sceneId"]).write_text(json.dumps(scene, indent=2), encoding="utf-8")
 
-    def get_all_scenes(self):
+    def get_all_scenes(self) -> List[Dict[str, Any]]:
         scenes = []
         for path in SCENES_DIR.glob("*.json"):
             try:
@@ -163,14 +224,14 @@ class SceneStore:
         scenes.sort(key=lambda item: item.get("order", 0))
         return scenes
 
-    def update_scene(self, scene):
+    def update_scene(self, scene: SceneDict) -> None:
         self.scenes[scene["sceneId"]] = scene
         self.save_scene(scene)
 
-    def change_active_scene(self, scene_id):
+    def change_active_scene(self, scene_id: Optional[SceneId]) -> None:
         self.active_scene_id = scene_id
 
-    def delete_scene(self, scene_id):
+    def delete_scene(self, scene_id: SceneId) -> None:
         scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
         self.path_for(scene_id).unlink(missing_ok=True)
         self.scenes.pop(scene_id, None)
@@ -178,13 +239,13 @@ class SceneStore:
             image_url = token.get("imageUrl")
             self.delete_upload_if_unused(image_url)
 
-    def update_scene_order(self, scene_order):
+    def update_scene_order(self, scene_order: List[SceneId]) -> None:
         for index, scene_id in enumerate(scene_order):
             scene = self.load_scene(scene_id)
             scene["order"] = index
             self.save_scene(scene)
 
-    def is_image_used_elsewhere(self, image_url):
+    def is_image_used_elsewhere(self, image_url: Optional[str]) -> bool:
         if not image_url:
             return False
         for path in SCENES_DIR.glob("*.json"):
@@ -197,7 +258,7 @@ class SceneStore:
                     return True
         return False
 
-    def delete_upload_if_unused(self, image_url):
+    def delete_upload_if_unused(self, image_url: Optional[str]) -> None:
         if not image_url or image_url.startswith("data:") or image_url.startswith("/media/"):
             return
         if self.is_image_used_elsewhere(image_url):
@@ -209,7 +270,7 @@ class SceneStore:
         except OSError:
             pass
 
-    def update_token(self, scene_id, token_id, properties):
+    def update_token(self, scene_id: SceneId, token_id: str, properties: Dict[str, Any]) -> Tuple[Optional[TokenDict], bool, bool]:
         scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
         for token in scene.get("tokens", []):
             if token.get("tokenId") == token_id:
@@ -219,12 +280,12 @@ class SceneStore:
                 return token, was_hidden, bool(token.get("hidden"))
         return None, False, False
 
-    def add_token(self, scene_id, token):
+    def add_token(self, scene_id: SceneId, token: TokenDict) -> None:
         scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
         scene.setdefault("tokens", []).append(token)
         self.save_scene(scene)
 
-    def remove_token(self, scene_id, token_id):
+    def remove_token(self, scene_id: SceneId, token_id: str) -> Optional[TokenDict]:
         scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
         tokens = scene.setdefault("tokens", [])
         for index, token in enumerate(tokens):
@@ -247,17 +308,17 @@ class SceneHistory:
     MAX_DEPTH = 50
     COALESCE_WINDOW_MS = 300
 
-    def __init__(self, store):
+    def __init__(self, store: SceneStore) -> None:
         self._store = store
         self._lock = threading.Lock()
-        self._scenes = {}
+        self._scenes: Dict[SceneId, Dict[str, Any]] = {}
 
-    def _ensure_scene(self, scene_id):
+    def _ensure_scene(self, scene_id: SceneId) -> Dict[str, Any]:
         if scene_id not in self._scenes:
             self._scenes[scene_id] = {"undo": [], "redo": [], "pending": None}
         return self._scenes[scene_id]
 
-    def before_mutation(self, scene_id):
+    def before_mutation(self, scene_id: SceneId) -> None:
         now = time.time() * 1000
         with self._lock:
             self._ensure_scene(scene_id)
@@ -285,7 +346,7 @@ class SceneHistory:
                 "deleted_image_urls": [],
             }
 
-    def record_pending_deletion(self, scene_id, url):
+    def record_pending_deletion(self, scene_id: SceneId, url: Optional[str]) -> None:
         if not url:
             return
         with self._lock:
@@ -294,7 +355,7 @@ class SceneHistory:
             if pending is not None:
                 pending["deleted_image_urls"].append(url)
 
-    def undo(self, scene_id):
+    def undo(self, scene_id: SceneId) -> Optional[Dict[str, Any]]:
         with self._lock:
             self._ensure_scene(scene_id)
             self._finalize_pending_locked(scene_id)
@@ -306,7 +367,7 @@ class SceneHistory:
             entry["redo"].append({"tokens": current, "deleted_image_urls": []})
             return entry["undo"].pop()
 
-    def redo(self, scene_id):
+    def redo(self, scene_id: SceneId) -> Optional[Dict[str, Any]]:
         with self._lock:
             self._ensure_scene(scene_id)
             self._finalize_pending_locked(scene_id)
@@ -320,14 +381,14 @@ class SceneHistory:
                 self._evict_oldest_locked(scene_id)
             return entry["redo"].pop()
 
-    def state(self, scene_id):
+    def state(self, scene_id: SceneId) -> Tuple[bool, bool]:
         with self._lock:
             self._ensure_scene(scene_id)
             self._sweep_all_locked()
             entry = self._scenes[scene_id]
             return (len(entry["undo"]) > 0, len(entry["redo"]) > 0)
 
-    def _finalize_pending_locked(self, scene_id):
+    def _finalize_pending_locked(self, scene_id: SceneId) -> None:
         entry = self._scenes[scene_id]
         pending = entry["pending"]
         if pending is None:
@@ -344,7 +405,7 @@ class SceneHistory:
         if len(entry["undo"]) > self.MAX_DEPTH:
             self._evict_oldest_locked(scene_id)
 
-    def _evict_oldest_locked(self, scene_id):
+    def _evict_oldest_locked(self, scene_id: SceneId) -> None:
         entry = self._scenes[scene_id]
         if not entry["undo"]:
             return
@@ -352,7 +413,7 @@ class SceneHistory:
         for url in evicted.get("deleted_image_urls", []):
             self._store.delete_upload_if_unused(url)
 
-    def _sweep_all_locked(self):
+    def _sweep_all_locked(self) -> None:
         now = time.time() * 1000
         for scene_id, entry in self._scenes.items():
             pending = entry["pending"]
@@ -375,20 +436,20 @@ grid_state = None
 initiative_state = None
 
 
-def require_dm():
+def require_dm() -> bool:
     return bool(session.get("isDM"))
 
 
-def require_player():
+def require_player() -> bool:
     return bool(session.get("isPlayer") or session.get("isDM"))
 
 
-def json_body():
+def json_body() -> Dict[str, Any]:
     return request.get_json(silent=True) or request.form.to_dict() or {}
 
 
 @app.before_request
-def redirect_static_html_names():
+def redirect_static_html_names() -> Optional[Response]:
     if request.path == "/index.html":
         return redirect("/")
     if request.path == "/dm.html":
@@ -401,26 +462,26 @@ def redirect_static_html_names():
 
 
 @app.after_request
-def cache_headers(response):
+def cache_headers(response: Response) -> Response:
     if request.path.lower().endswith((".html", ".css", ".js")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
 
 @app.get("/")
-def player_index():
+def player_index() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     return send_from_directory(PUBLIC_DIR, "index.html")
 
 
 @app.get("/player-login")
-def player_login_page():
+def player_login_page() -> RouteReturn:
     return send_from_directory(PUBLIC_DIR, "player-login.html")
 
 
 @app.post("/player-login")
-def player_login():
+def player_login() -> RouteReturn:
     password = request.form.get("password") or json_body().get("password")
     if password == app.config["PLAYER_PASSWORD"]:
         session["isPlayer"] = True
@@ -429,12 +490,12 @@ def player_login():
 
 
 @app.get("/dm-login")
-def dm_login_page():
+def dm_login_page() -> RouteReturn:
     return send_from_directory(PUBLIC_DIR, "dm-login.html")
 
 
 @app.post("/dm-login")
-def dm_login():
+def dm_login() -> RouteReturn:
     password = request.form.get("password") or json_body().get("password")
     if password == app.config["DM_PASSWORD"]:
         session["isDM"] = True
@@ -443,28 +504,28 @@ def dm_login():
 
 
 @app.get("/dm")
-def dm_page():
+def dm_page() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     return send_from_directory(PUBLIC_DIR, "dm.html")
 
 
 @app.get("/dmadmin")
-def files_page():
+def files_page() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     return send_from_directory(PUBLIC_DIR, "files.html")
 
 
 @app.get("/player-files")
-def player_files_page():
+def player_files_page() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     return send_from_directory(PUBLIC_DIR, "player-files.html")
 
 
 @app.post("/createScene")
-def create_scene():
+def create_scene() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     data = json_body()
@@ -476,12 +537,12 @@ def create_scene():
 
 
 @app.get("/scenes")
-def get_scenes():
+def get_scenes() -> RouteReturn:
     return jsonify({"scenes": scene_store.get_all_scenes()})
 
 
 @app.post("/updateScene")
-def update_scene():
+def update_scene() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     try:
@@ -492,7 +553,7 @@ def update_scene():
 
 
 @app.post("/deleteScene")
-def delete_scene():
+def delete_scene() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     try:
@@ -505,7 +566,7 @@ def delete_scene():
 
 
 @app.post("/duplicateScene")
-def duplicate_scene():
+def duplicate_scene() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     data = json_body()
@@ -523,7 +584,7 @@ def duplicate_scene():
 
 
 @app.post("/updateSceneOrder")
-def update_scene_order():
+def update_scene_order() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     try:
@@ -534,7 +595,7 @@ def update_scene_order():
 
 
 @app.post("/upload")
-def upload_file():
+def upload_file() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     file = request.files.get("file")
@@ -554,7 +615,7 @@ def upload_file():
 
 
 @app.post("/uploadMusic")
-def upload_music():
+def upload_music() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     file = request.files.get("music")
@@ -570,7 +631,7 @@ def upload_music():
 
 
 @app.get("/musicList")
-def music_list():
+def music_list() -> RouteReturn:
     MUSIC_DIR.mkdir(parents=True, exist_ok=True)
     tracks = []
     for path in MUSIC_DIR.iterdir():
@@ -584,7 +645,7 @@ def music_list():
 
 
 @app.post("/deleteMusic")
-def delete_music():
+def delete_music() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     filename = Path(json_body().get("filename") or "").name
@@ -598,7 +659,7 @@ def delete_music():
 
 
 @app.get("/mediaList")
-def media_list():
+def media_list() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
@@ -622,7 +683,7 @@ def media_list():
 
 
 @app.post("/mediaFolder")
-def media_folder_create():
+def media_folder_create() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     name = safe_folder_name(json_body().get("name"))
@@ -633,7 +694,7 @@ def media_folder_create():
 
 
 @app.post("/mediaUpload")
-def media_upload():
+def media_upload() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     folder = safe_folder_name(request.args.get("folder"))
@@ -656,7 +717,7 @@ def media_upload():
 
 
 @app.get("/playerMediaList")
-def player_media_list():
+def player_media_list() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     PLAYER_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
@@ -680,7 +741,7 @@ def player_media_list():
 
 
 @app.post("/playerMediaUpload")
-def player_media_upload():
+def player_media_upload() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     provided = request.headers.get("X-DM-Password") or ""
@@ -706,7 +767,7 @@ def player_media_upload():
 
 
 @app.post("/playerMediaFolder")
-def player_media_folder_create():
+def player_media_folder_create() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     provided = request.headers.get("X-DM-Password") or ""
@@ -720,7 +781,7 @@ def player_media_folder_create():
 
 
 @app.delete("/playerMediaFolder")
-def player_media_folder_delete():
+def player_media_folder_delete() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     provided = request.headers.get("X-DM-Password") or ""
@@ -734,7 +795,7 @@ def player_media_folder_delete():
 
 
 @app.delete("/playerMediaFile")
-def player_media_file_delete():
+def player_media_file_delete() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
     provided = request.headers.get("X-DM-Password") or ""
@@ -751,7 +812,7 @@ def player_media_file_delete():
 
 
 @app.delete("/mediaFolder")
-def media_folder_delete():
+def media_folder_delete() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     name = safe_folder_name(json_body().get("name"))
@@ -762,7 +823,7 @@ def media_folder_delete():
 
 
 @app.patch("/mediaFolder")
-def media_folder_rename():
+def media_folder_rename() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     data = json_body()
@@ -775,7 +836,7 @@ def media_folder_rename():
 
 
 @app.delete("/mediaFile")
-def media_file_delete():
+def media_file_delete() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     rel = safe_relative_media_path(json_body().get("url"))
@@ -786,7 +847,7 @@ def media_file_delete():
 
 
 @app.get("/passwords")
-def passwords_get():
+def passwords_get() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     current = read_secrets()
@@ -797,7 +858,7 @@ def passwords_get():
 
 
 @app.put("/passwords")
-def passwords_put():
+def passwords_put() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     data = json_body()
@@ -814,7 +875,7 @@ def passwords_put():
 
 
 @app.get("/sticky-notes")
-def sticky_notes_get():
+def sticky_notes_get() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -824,7 +885,7 @@ def sticky_notes_get():
 
 
 @app.post("/sticky-notes")
-def sticky_notes_post():
+def sticky_notes_post() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     notes = request.get_json(silent=True)
@@ -835,7 +896,7 @@ def sticky_notes_post():
     return jsonify({"ok": True})
 
 
-def server_roll(raw_notation):
+def server_roll(raw_notation: str) -> Dict[str, str]:
     if not isinstance(raw_notation, str):
         return {"notation": "1d6", "text": "?", "color": "#4CAF50"}
     clean = raw_notation.strip()
@@ -855,7 +916,7 @@ def server_roll(raw_notation):
     }
 
 
-def is_dm_socket():
+def is_dm_socket() -> bool:
     return getattr(request, "sid", None) and socket_roles.get(request.sid) == "dm"
 
 
@@ -863,7 +924,7 @@ socket_roles = {}
 
 
 @socketio.on("connect")
-def socket_connect():
+def socket_connect() -> None:
     role = request.args.get("role") or "player"
     socket_roles[request.sid] = role
     join_room(role)
@@ -877,12 +938,12 @@ def socket_connect():
 
 
 @socketio.on("disconnect")
-def socket_disconnect():
+def socket_disconnect() -> None:
     socket_roles.pop(request.sid, None)
 
 
 @socketio.on("loadScene")
-def socket_load_scene(data):
+def socket_load_scene(data: Optional[Dict[str, Any]]) -> None:
     try:
         scene = scene_store.load_scene((data or {}).get("sceneId"))
         if socket_roles.get(request.sid) == "player":
@@ -896,7 +957,7 @@ def socket_load_scene(data):
 
 
 @socketio.on("changeScene")
-def socket_change_scene(data):
+def socket_change_scene(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket():
         return
     scene_store.change_active_scene((data or {}).get("sceneId"))
@@ -904,7 +965,7 @@ def socket_change_scene(data):
 
 
 @socketio.on("updateToken")
-def socket_update_token(data):
+def socket_update_token(data: Optional[Dict[str, Any]]) -> None:
     scene_id = (data or {}).get("sceneId")
     token_id = (data or {}).get("tokenId")
     properties = (data or {}).get("properties") or {}
@@ -938,7 +999,7 @@ def socket_update_token(data):
 
 
 @socketio.on("addToken")
-def socket_add_token(data):
+def socket_add_token(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket():
         return
     scene_id = (data or {}).get("sceneId")
@@ -951,7 +1012,7 @@ def socket_add_token(data):
 
 
 @socketio.on("removeToken")
-def socket_remove_token(data):
+def socket_remove_token(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket():
         return
     scene_id = (data or {}).get("sceneId")
@@ -966,37 +1027,37 @@ def socket_remove_token(data):
 
 
 @socketio.on("playTrack")
-def socket_play_track(data):
+def socket_play_track(data: Optional[Dict[str, Any]]) -> None:
     if is_dm_socket():
         emit("playTrack", data, broadcast=True, include_self=False)
 
 
 @socketio.on("pauseTrack")
-def socket_pause_track(data):
+def socket_pause_track(data: Optional[Dict[str, Any]]) -> None:
     if is_dm_socket():
         emit("pauseTrack", data, broadcast=True, include_self=False)
 
 
 @socketio.on("setTrackVolume")
-def socket_track_volume(data):
+def socket_track_volume(data: Optional[Dict[str, Any]]) -> None:
     if is_dm_socket():
         emit("setTrackVolume", data, broadcast=True, include_self=False)
 
 
 @socketio.on("deleteTrack")
-def socket_delete_track(data):
+def socket_delete_track(data: Optional[Dict[str, Any]]) -> None:
     if is_dm_socket():
         emit("deleteTrack", data, broadcast=True, include_self=False)
 
 
 @socketio.on("addTrack")
-def socket_add_track(data):
+def socket_add_track(data: Optional[Dict[str, Any]]) -> None:
     if is_dm_socket():
         emit("addTrack", data, broadcast=True, include_self=False)
 
 
 @socketio.on("updateInitiative")
-def socket_update_initiative(data):
+def socket_update_initiative(data: Optional[Dict[str, Any]]) -> None:
     global initiative_state
     if not is_dm_socket():
         return
@@ -1005,7 +1066,7 @@ def socket_update_initiative(data):
 
 
 @socketio.on("toggleGrid")
-def socket_toggle_grid(data):
+def socket_toggle_grid(data: Optional[Dict[str, Any]]) -> None:
     global grid_state
     if not is_dm_socket():
         return
@@ -1014,7 +1075,7 @@ def socket_toggle_grid(data):
 
 
 @socketio.on("snapView")
-def socket_snap_view(data):
+def socket_snap_view(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket():
         return
     if data and data.get("sceneId"):
@@ -1023,7 +1084,7 @@ def socket_snap_view(data):
 
 
 @socketio.on("setBgColor")
-def socket_set_bg_color(data):
+def socket_set_bg_color(data: Optional[Dict[str, Any]]) -> None:
     global bg_color
     if not is_dm_socket():
         return
@@ -1032,12 +1093,12 @@ def socket_set_bg_color(data):
 
 
 @socketio.on("pingScene")
-def socket_ping_scene(data):
+def socket_ping_scene(data: Optional[Dict[str, Any]]) -> None:
     emit("pingScene", data, broadcast=True, include_self=False)
 
 
 @socketio.on("rollDice")
-def socket_roll_dice(payload):
+def socket_roll_dice(payload: Optional[Any]) -> None:
     raw_notation = payload if isinstance(payload, str) else (payload or {}).get("notation")
     colorset = (payload or {}).get("colorset", "white") if isinstance(payload, dict) else "white"
     texture = (payload or {}).get("texture", "") if isinstance(payload, dict) else ""
@@ -1047,12 +1108,12 @@ def socket_roll_dice(payload):
 
 
 @socketio.on("clearDice")
-def socket_clear_dice():
+def socket_clear_dice() -> None:
     socketio.emit("diceCleared")
 
 
 @socketio.on("addTokenFromLibrary")
-def socket_add_token_from_library(data):
+def socket_add_token_from_library(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket() or not scene_store.active_scene_id:
         return
     scene = scene_store.scenes.get(scene_store.active_scene_id) or scene_store.load_scene(scene_store.active_scene_id)
@@ -1078,7 +1139,7 @@ def socket_add_token_from_library(data):
     socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
 
-def _apply_snapshot_and_broadcast(scene_id, snapshot):
+def _apply_snapshot_and_broadcast(scene_id: str, snapshot: Dict[str, Any]) -> None:
     scene = scene_store.scenes.get(scene_id) or scene_store.load_scene(scene_id)
     scene["tokens"] = snapshot["tokens"]
     scene_store.save_scene(scene)
@@ -1091,7 +1152,7 @@ def _apply_snapshot_and_broadcast(scene_id, snapshot):
 
 
 @socketio.on("undo")
-def socket_undo(data):
+def socket_undo(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket():
         return
     scene_id = scene_store.active_scene_id
@@ -1104,7 +1165,7 @@ def socket_undo(data):
 
 
 @socketio.on("redo")
-def socket_redo(data):
+def socket_redo(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket():
         return
     scene_id = scene_store.active_scene_id
@@ -1116,7 +1177,7 @@ def socket_redo(data):
     _apply_snapshot_and_broadcast(scene_id, snapshot)
 
 
-def main():
+def main() -> None:
     port = int(os.environ.get("VTT_PORT", "3000"))
     print(f"Passwords loaded from: {SECRET_FILE}")
     print(f"Project folder: {BASE_DIR}")
