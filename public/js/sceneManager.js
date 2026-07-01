@@ -165,6 +165,9 @@ export class SceneManager {
   }
 
   // ── Scene UI rendering ────────────────────────────────────────
+  /**
+   * @param {SceneDict[]} scenes
+   */
   renderSceneButtons(scenes) {
     this.allScenes = scenes;
     this._renderPinnedButtons();
@@ -262,6 +265,9 @@ export class SceneManager {
     if (menu) menu.classList.add('hidden');
   }
 
+  /**
+   * @param {SceneDict} scene
+   */
   onSceneButtonClick(scene) {
     const followPlayers = document.getElementById('follow-players-toggle')?.checked !== false;
     window.VTT_FOLLOW_PLAYERS = followPlayers;
@@ -279,6 +285,9 @@ export class SceneManager {
     this.socket.emit('loadScene', { sceneId: sceneId });
   }
 
+  /**
+   * @param {SceneDict} scene
+   */
   onSceneData(scene) {
     this.currentScene = scene;
     scene.tokens.forEach(t => { t.sceneId = scene.sceneId; });
@@ -289,6 +298,9 @@ export class SceneManager {
     this._updateDropdownLabel();
   }
 
+  /**
+   * @param {SceneDict} scene
+   */
   renderScene(scene) {
     this.sceneRenderer.renderScene(scene);
 
@@ -338,6 +350,11 @@ export class SceneManager {
     this.refreshSelectionStyles();
   }
 
+  /**
+   * @param {MouseEvent} event
+   * @param {TokenDict}  token
+   * @returns {boolean}
+   */
   _isClickOnEffectOutline(event, token) {
     const rect = this.sceneContainer.getBoundingClientRect();
     const r    = this.sceneRenderer;
@@ -766,6 +783,11 @@ export class SceneManager {
       });
   }
 
+  /**
+   * @param {string} sceneId
+   * @param {string} tokenId
+   * @param {Partial<TokenDict>} properties
+   */
   onUpdateToken(sceneId, tokenId, properties) {
     if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
 
@@ -885,6 +907,10 @@ export class SceneManager {
       let width, height;
   
       // Function to create the token after media dimensions are available
+      /**
+       * Constructs the token object literal, adds it to the scene, emits to server, renders, and sets up interactions.
+       * @type {() => void}
+       */
       const createToken = () => {
         // Create a new token
         const token = {
@@ -1038,6 +1064,9 @@ export class SceneManager {
       });
   }
 
+  /**
+   * @returns {number}
+   */
   getMaxZIndex() {
     if (!this.currentScene || !this.currentScene.tokens || this.currentScene.tokens.length === 0) {
       return 0;

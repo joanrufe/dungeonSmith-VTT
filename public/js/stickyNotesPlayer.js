@@ -1,5 +1,8 @@
 // public/js/stickyNotesPlayer.js
 // Player sticky notes tool. Notes are private and stored in localStorage.
+
+/** @typedef {import('./sceneManager.js').StickyNoteDict} StickyNoteDict */
+
 (function () {
   const COLORS    = { yellow: '#FFE57F', orange: '#FFB347', cyan: '#B2EBF2' };
   const BASE_FONT = 30;
@@ -29,6 +32,12 @@
     if (sc && !notesLayer.parentNode) sc.appendChild(notesLayer);
   }
 
+  /**
+   * Syncs an existing note DOM element's position and size to current renderer state.
+   * @param {HTMLElement}    el
+   * @param {StickyNoteDict} note
+   * @param {object}         r  - SceneRenderer instance
+   */
   function syncEl(el, note, r) {
     el.style.left   = `${(note.x + r.offsetX) * r.scale}px`;
     el.style.top    = `${(note.y + r.offsetY) * r.scale}px`;
@@ -55,6 +64,11 @@
 
   // ── Element creation ───────────────────────────────────────────
 
+  /**
+   * Creates a DOM element for the given note and attaches it to note.el.
+   * @param {StickyNoteDict} note
+   * @returns {HTMLElement}
+   */
   function makeElement(note) {
     const el = document.createElement('div');
     el.className = 'sticky-note';
@@ -89,6 +103,12 @@
     return el;
   }
 
+  /**
+   * Attaches interact.js drag and resize handlers to a note's DOM element.
+   * Mutates note.x, note.y, note.w, note.h during drag/resize.
+   * @param {StickyNoteDict} note
+   * @param {HTMLElement}    el
+   */
   function setupInteract(note, el) {
     interact(el)
       .draggable({
@@ -128,6 +148,9 @@
 
   // ── Render ─────────────────────────────────────────────────────
 
+  /**
+   * Renders all notes from scratch into notesLayer.
+   */
   function renderAll() {
     ensureLayer();
     if (!notesLayer) return;
@@ -141,6 +164,10 @@
     });
   }
 
+  /**
+   * Appends a single note element to the layer and wires up interactions.
+   * @param {StickyNoteDict} note
+   */
   function addElement(note) {
     ensureLayer();
     const r = getRenderer();
@@ -188,6 +215,12 @@
 
   // ── CRUD ───────────────────────────────────────────────────────
 
+  /**
+   * Creates a new note at the given world coordinates and persists it.
+   * @param {number} worldX
+   * @param {number} worldY
+   * @returns {StickyNoteDict}
+   */
   function createNote(worldX, worldY) {
     const note = {
       id:    Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -214,10 +247,16 @@
 
   // ── Persistence (localStorage) ─────────────────────────────────
 
+  /**
+   * Persists the in-memory notes array to localStorage.
+   */
   function saveNotes() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(notes)); } catch (e) {}
   }
 
+  /**
+   * Loads notes from localStorage and renders them. Populates the module-level `notes` array.
+   */
   function loadNotes() {
     try {
       const data = localStorage.getItem(LS_KEY);

@@ -1,5 +1,8 @@
 // public/js/sceneRenderer.js
 
+/** @typedef {import('./sceneManager.js').TokenDict} TokenDict */
+/** @typedef {import('./sceneManager.js').SceneDict} SceneDict */
+
 export class SceneRenderer {
   constructor(container, isDM = false) {
     this.container = container;
@@ -34,6 +37,9 @@ export class SceneRenderer {
     return el;
   }
 
+  /**
+   * @param {SceneDict} scene
+   */
   renderScene(scene) {
     this.resetCamera();
     // Remember bg color then restore after the innerHTML wipe
@@ -76,6 +82,9 @@ export class SceneRenderer {
     this.container.style.backgroundColor = '';
   }
 
+  /**
+   * @param {TokenDict} token
+   */
   _syncHpBar(token) {
     if (token.isPaintTile) return;
     const BAR_H = 6, GAP = 3;
@@ -100,6 +109,9 @@ export class SceneRenderer {
     bar.querySelector('.token-hp-bar-fill').style.background = color;
   }
 
+  /**
+   * @param {TokenDict} token
+   */
   _syncConditionLabel(token) {
     if (token.isPaintTile) return;
     const BAR_H = 6, BAR_GAP = 3, LABEL_GAP = 2;
@@ -126,6 +138,10 @@ export class SceneRenderer {
     label.style.opacity      = (this.isDM && token.hidden) ? '0.5' : '1';
   }
 
+  /**
+   * @param {TokenDict} token
+   * @returns {HTMLElement|undefined}
+   */
   renderToken(token) {
     if (!this.isDM && token.hidden) {
       return;
@@ -205,6 +221,9 @@ export class SceneRenderer {
   }
 
   // Update a single token element's position and size
+  /**
+   * @param {TokenDict} token
+   */
   updateTokenElement(token) {
     const element = document.getElementById(`token-${token.tokenId}`);
   

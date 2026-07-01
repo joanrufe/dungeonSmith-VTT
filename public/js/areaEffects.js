@@ -5,6 +5,8 @@
 //  Breathing uses SVG SMIL animation (works in <img> src).
 // =========================================================
 
+/** @typedef {import('./sceneManager.js').TokenDict} TokenDict */
+
 (function () {
   const FT_PER_CELL = 5;
 
@@ -109,6 +111,7 @@
     const wx = (window.innerWidth  / 2 / r.scale) - r.offsetX - w / 2;
     const wy = (window.innerHeight / 2 / r.scale) - r.offsetY - h / 2;
 
+    /** @type {TokenDict} */
     const token = {
       tokenId:          Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       imageUrl,

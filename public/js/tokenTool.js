@@ -2,6 +2,9 @@
 // Scene-container-level Token Tool for dragging tokens.
 // Works on both DM (window.VTT_DM) and Player (window.VTT_PLAYER) pages.
 // Listens once on #scene-container — no per-element listener churn.
+
+/** @typedef {import('./sceneManager.js').TokenDict} TokenDict */
+
 (function () {
   document.addEventListener('DOMContentLoaded', () => {
     function tryBind() {
@@ -78,6 +81,7 @@
         ctx.vtt.sceneManager.selectedTokenIds.has(token.tokenId)
         ? Array.from(ctx.vtt.sceneManager.selectedTokenIds)
         : [token.tokenId];
+      /** @type {TokenDict[]} */
       const movingTokens = selectedIds
         .map(id => ctx.scene.tokens.find(t => t.tokenId === id))
         .filter(Boolean);
@@ -197,6 +201,12 @@
     });
   }
 
+  /**
+   * Displays the status popup (HP + condition) for the given token.
+   * @param {number} clientX
+   * @param {number} clientY
+   * @param {string} tokenId
+   */
   function showStatusPopup(clientX, clientY, tokenId) {
     const ctx = getContext();
     if (!ctx || !ctx.scene) return;

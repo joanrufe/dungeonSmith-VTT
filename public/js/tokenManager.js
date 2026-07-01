@@ -1,5 +1,7 @@
 // public/js/tokenManager.js
 
+/** @typedef {import('./sceneManager.js').TokenDict} TokenDict */
+
 export class TokenManager {
   constructor(sceneRenderer, socket, isDM = false) {
     this.sceneRenderer = sceneRenderer;
@@ -7,6 +9,9 @@ export class TokenManager {
     this.isDM = isDM;
   }
 
+  /**
+   * @param {TokenDict} token
+   */
   setupTokenInteractions(token) {
     if (token.isPaintTile) return;
     if (!this.isDM && token.hidden) return;
@@ -28,6 +33,10 @@ export class TokenManager {
   }
 
   // ── Resize via interact.js (DM only) ──────────────────────
+  /**
+   * @param {HTMLElement} element
+   * @param {TokenDict}   token
+   */
   _attachResize(element, token) {
     if (typeof interact === 'undefined') return;
     interact(element).unset();
@@ -45,6 +54,11 @@ export class TokenManager {
       });
   }
 
+  /**
+   * Handles a resize move event from interact.js, mutating token dimensions in place.
+   * @param {object}    event - interact.js ResizeEvent
+   * @param {TokenDict} token
+   */
   onResizeMove(event, token) {
     const target   = event.target;
     const shiftKey = event.shiftKey;
@@ -76,6 +90,10 @@ export class TokenManager {
   }
 
   // ── Hover glow ─────────────────────────────────────────────
+  /**
+   * @param {TokenDict} token
+   * @param {boolean}   enable
+   */
   toggleHoverShadow(token, enable) {
     const element = document.getElementById(`token-${token.tokenId}`);
     if (!element) return;
