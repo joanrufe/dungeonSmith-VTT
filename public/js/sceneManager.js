@@ -492,6 +492,16 @@ export class SceneManager {
       } else {
         alert('No scene is currently loaded.');
       }
+    } else if (this.hasSelection() && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      event.preventDefault();
+      const step = event.shiftKey ? 25 : 5;
+      let dx = 0;
+      let dy = 0;
+      if (event.key === 'ArrowUp') dy = -step;
+      else if (event.key === 'ArrowDown') dy = step;
+      else if (event.key === 'ArrowLeft') dx = -step;
+      else if (event.key === 'ArrowRight') dx = step;
+      this.moveSelectedTokensBy(dx, dy);
     }
   }
 
@@ -508,6 +518,32 @@ export class SceneManager {
 
   forEachSelectedTokenId(callback) {
     this.getSelectedTokenIds().forEach(callback);
+  }
+
+  /**
+   * Move all selected tokens by the given delta. Locked tokens are skipped.
+   * @param {number} dx
+   * @param {number} dy
+   */
+  moveSelectedTokensBy(dx, dy) {
+    if (!this.currentScene) return;
+    let moved = false;
+    this.getSelectedTokenIds().forEach((tokenId) => {
+      const token = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
+      if (!token || token.locked) return;
+      token.x += dx;
+      token.y += dy;
+      this.sceneRenderer.updateTokenElement(token);
+      this.socket.emit('updateToken', {
+        sceneId: this.currentScene.sceneId,
+        tokenId: token.tokenId,
+        properties: { x: token.x, y: token.y },
+      });
+      moved = true;
+    });
+    if (moved && !this.isDM) {
+      this.sceneRenderer.drawFog();
+    }
   }
 
   clearSelection() {
