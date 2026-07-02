@@ -12,6 +12,7 @@ export class SceneRenderer {
     this.scale = 1;
     this.offsetX = 0;
     this.offsetY = 0;
+    this.fogOpacity = 1.0;
   }
 
   /**
@@ -24,6 +25,16 @@ export class SceneRenderer {
     } else {
       this.drawFog();
     }
+  }
+
+  /**
+   * Update the fog overlay opacity and redraw it.
+   * @param {number} v opacity in [0, 1]
+   */
+  setFogOpacity(v) {
+    const clamped = Math.max(0, Math.min(1, Number(v) || 0));
+    this.fogOpacity = clamped;
+    this.drawFog();
   }
 
   // ── Background colour helpers ───────────────────────────
@@ -63,6 +74,9 @@ export class SceneRenderer {
     this._bgColor = savedBg;
     // Re-create the background layer
     this._getBgEl();
+
+    // Pull the per-scene fog opacity (default 1.0 = fully opaque).
+    this.fogOpacity = Math.max(0, Math.min(1, Number(scene.fogOpacity) || 1));
 
     // For DM, include all tokens; for players, include only visible tokens
     if (this.isDM) {
@@ -127,18 +141,20 @@ export class SceneRenderer {
       svg.setAttribute('height', '100%');
       this.container.appendChild(svg);
     }
-    // Rebuild lines so we never have stale DOM
+    // Rebuild polygons so we never have stale DOM
     svg.innerHTML = '';
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     for (const wall of this.walls || []) {
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('x1', (wall.x1 + this.offsetX) * this.scale);
-      line.setAttribute('y1', (wall.y1 + this.offsetY) * this.scale);
-      line.setAttribute('x2', (wall.x2 + this.offsetX) * this.scale);
-      line.setAttribute('y2', (wall.y2 + this.offsetY) * this.scale);
-      line.setAttribute('data-wall-id', wall.wallId);
-      line.classList.add('wall-overlay-line');
-      group.appendChild(line);
+      const points = wall.points || [];
+      if (points.length < 3) continue;
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      const ptsAttr = points
+        .map(p => `${(p.x + this.offsetX) * this.scale},${(p.y + this.offsetY) * this.scale}`)
+        .join(' ');
+      poly.setAttribute('points', ptsAttr);
+      poly.setAttribute('data-wall-id', wall.wallId);
+      poly.classList.add('wall-overlay-line');
+      group.appendChild(poly);
     }
     svg.appendChild(group);
   }
@@ -400,10 +416,15 @@ export class SceneRenderer {
   /**
    * Draw the fog overlay:
    * 1. Fill the entire canvas with semi-opaque dark fog.
-   * 2. Punch wall-aware visibility polygons for every vision source:
-   *    visible, non-map, non-paint, non-area-effect token with visionRadius > 0.
-   *    Coordinates are transformed from world-space to screen-space via
-   *    the renderer's current pan/zoom state.
+   * 2. For each vision source (visible, non-map, non-paint, non-area-effect
+   *    token with visionRadius > 0), punch a radial gradient vision circle
+   *    with `destination-out`.
+   * 3. For every wall polygon whose bounding box overlaps the vision circle,
+   *    paint the polygon back with the fog colour so the wall re-occludes
+   *    any light that would otherwise pass through it.
+   *
+   * Walls are closed opaque polygons: their interior is always dark, which
+   * is exactly what a real light-blocking wall should do.
    */
   drawFog() {
     const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById('fog-canvas'));
@@ -429,15 +450,44 @@ export class SceneRenderer {
     });
     if (visionSources.length === 0) return;
 
-    // Step 1: paint the fog layer
+    const walls = (this.walls || []).filter(w => (w.points || []).length >= 3);
+
+    const fogFill = `rgba(0,0,0,${this.fogOpacity})`;
+
+    // Step 1: paint the fog layer. Opacity comes from the per-scene
+    // fogOpacity setting (default 1.0 = fully opaque so the map is not
+    // visible through the fog and players cannot infer the terrain under it).
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(0,0,0,0.92)';
+    ctx.fillStyle = fogFill;
     ctx.fillRect(0, 0, w, h);
 
-    // Step 2: cut vision holes
+    // Step 2: cut vision holes (unobstructed radial gradients)
     ctx.globalCompositeOperation = 'destination-out';
+    for (const token of visionSources) {
+      if (token.isMap)        continue;
+      if (token.isPaintTile)  continue;
+      if (token.isAreaEffect) continue;
+      const radius = token.visionRadius;
+      if (!radius || radius <= 0) continue;
 
-    const walls = this.walls || [];
+      const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
+      const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
+      const sr = radius * this.scale;
+
+      this._drawRadialVisionHole(ctx, cx, cy, sr);
+    }
+
+    // Step 3: re-occlude light inside any wall polygon that overlaps a
+    // vision circle. Walls are opaque masks, so anything inside them stays
+    // in fog.
+    if (walls.length === 0) {
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    // Walls are physical light-blockers: they must always be fully opaque,
+    // independent of the per-scene fogOpacity setting.
+    ctx.fillStyle = 'rgba(0,0,0,1)';
 
     for (const token of visionSources) {
       if (token.isMap)        continue;
@@ -446,39 +496,38 @@ export class SceneRenderer {
       const radius = token.visionRadius;
       if (!radius || radius <= 0) continue;
 
-      // World-space token centre → screen-space
       const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
       const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
       const sr = radius * this.scale;
 
-      if (walls.length === 0) {
-        // Fast path: unobstructed radial gradient
-        this._drawRadialVisionHole(ctx, cx, cy, sr);
-        continue;
+      // Bounding box of the vision circle in screen space
+      const minX = cx - sr, maxX = cx + sr;
+      const minY = cy - sr, maxY = cy + sr;
+
+      for (const wall of walls) {
+        const pts = wall.points;
+        // World-space bounding box of the polygon → screen-space
+        let pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
+        for (const p of pts) {
+          const sx = (p.x + this.offsetX) * this.scale;
+          const sy = (p.y + this.offsetY) * this.scale;
+          if (sx < pMinX) pMinX = sx;
+          if (sy < pMinY) pMinY = sy;
+          if (sx > pMaxX) pMaxX = sx;
+          if (sy > pMaxY) pMaxY = sy;
+        }
+        if (pMaxX < minX || pMinX > maxX || pMaxY < minY || pMinY > maxY) continue;
+
+        ctx.beginPath();
+        const first = pts[0];
+        ctx.moveTo((first.x + this.offsetX) * this.scale, (first.y + this.offsetY) * this.scale);
+        for (let i = 1; i < pts.length; i++) {
+          const p = pts[i];
+          ctx.lineTo((p.x + this.offsetX) * this.scale, (p.y + this.offsetY) * this.scale);
+        }
+        ctx.closePath();
+        ctx.fill();
       }
-
-      const points = this._computeVisibilityPolygon(cx, cy, sr, walls);
-      if (points.length < 3) continue;
-
-      // Clip to the visibility polygon, then paint a soft radial gradient
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
-      ctx.closePath();
-      ctx.clip();
-
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, sr);
-      grad.addColorStop(0,   'rgba(0,0,0,1)');
-      grad.addColorStop(0.75,'rgba(0,0,0,0.9)');
-      grad.addColorStop(1,   'rgba(0,0,0,0)');
-      ctx.beginPath();
-      ctx.arc(cx, cy, sr, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-      ctx.restore();
     }
 
     // Restore default composite for future draws
@@ -486,89 +535,16 @@ export class SceneRenderer {
   }
 
   /**
-   * Draw a simple unobstructed radial vision hole (fast path).
+   * Draw an unobstructed radial vision hole with a soft falloff.
    */
   _drawRadialVisionHole(ctx, cx, cy, sr) {
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, sr);
-    grad.addColorStop(0,   'rgba(0,0,0,1)');
-    grad.addColorStop(0.75,'rgba(0,0,0,0.9)');
-    grad.addColorStop(1,   'rgba(0,0,0,0)');
+    grad.addColorStop(0,    'rgba(0,0,0,1)');
+    grad.addColorStop(0.75, 'rgba(0,0,0,0.9)');
+    grad.addColorStop(1,    'rgba(0,0,0,0)');
     ctx.beginPath();
     ctx.arc(cx, cy, sr, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
-  }
-
-  /**
-   * Ray-segment intersection. Returns the distance t along the ray from the
-   * origin to the intersection point, or null if the segment is not hit.
-   */
-  _raySegmentIntersection(ox, oy, dx, dy, x1, y1, x2, y2) {
-    const sdx = x2 - x1;
-    const sdy = y2 - y1;
-    const denom = dx * sdy - dy * sdx;
-    if (Math.abs(denom) < 1e-10) return null;
-
-    const t = ((x1 - ox) * sdy - (y1 - oy) * sdx) / denom;
-    const u = ((x1 - ox) * dy - (y1 - oy) * dx) / denom;
-
-    if (t > 1e-6 && u >= 0 && u <= 1) return t;
-    return null;
-  }
-
-  /**
-   * Cast a single ray and return the nearest screen-space hit within maxDist.
-   */
-  _castRay(ox, oy, angle, maxDist, walls) {
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
-    let nearest = maxDist;
-
-    for (const wall of walls) {
-      const t = this._raySegmentIntersection(ox, oy, dx, dy,
-        (wall.x1 + this.offsetX) * this.scale,
-        (wall.y1 + this.offsetY) * this.scale,
-        (wall.x2 + this.offsetX) * this.scale,
-        (wall.y2 + this.offsetY) * this.scale
-      );
-      if (t !== null && t < nearest) nearest = t;
-    }
-
-    return { x: ox + dx * nearest, y: oy + dy * nearest, dist: nearest };
-  }
-
-  /**
-   * Compute a visibility polygon for a vision source at (cx,cy) with radius sr,
-   * bounded by the supplied wall segments. Casts rays at every wall endpoint
-   * plus small angular offsets to avoid slivers, and a few fallback ring rays.
-   */
-  _computeVisibilityPolygon(cx, cy, sr, walls) {
-    const EPS = 0.0001;
-    const angles = new Set();
-
-    for (const wall of walls) {
-      const a1 = Math.atan2((wall.y1 + this.offsetY) * this.scale - cy,
-                            (wall.x1 + this.offsetX) * this.scale - cx);
-      const a2 = Math.atan2((wall.y2 + this.offsetY) * this.scale - cy,
-                            (wall.x2 + this.offsetX) * this.scale - cx);
-      angles.add(a1 - EPS);
-      angles.add(a1);
-      angles.add(a1 + EPS);
-      angles.add(a2 - EPS);
-      angles.add(a2);
-      angles.add(a2 + EPS);
-    }
-
-    // Fallback ring rays guarantee coverage even with no nearby walls
-    for (let i = 0; i < 32; i++) {
-      angles.add((Math.PI * 2 * i) / 32);
-    }
-
-    const unique = Array.from(angles).sort((a, b) => a - b);
-    const points = [];
-    for (const angle of unique) {
-      points.push(this._castRay(cx, cy, angle, sr, walls));
-    }
-    return points;
   }
 }

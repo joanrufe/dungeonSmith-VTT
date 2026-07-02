@@ -54,17 +54,20 @@ class _SceneDictRequired(TypedDict):
     tokens: List[TokenDict]
 
 
+class WallPointDict(TypedDict):
+    x: float
+    y: float
+
+
 class WallDict(TypedDict):
     wallId: str
-    x1: float
-    y1: float
-    x2: float
-    y2: float
+    points: List[WallPointDict]
 
 
 class SceneDict(_SceneDictRequired, total=False):
     order: int
     walls: List[WallDict]
+    fogOpacity: float
 
 
 class _StickyNoteDictRequired(TypedDict):
@@ -212,10 +215,12 @@ class SceneStore:
         if scene_id in self.scenes:
             scene = self.scenes[scene_id]
             scene.setdefault("walls", [])
+            scene.setdefault("fogOpacity", 1.0)
             return scene
         path = self.path_for(scene_id)
         scene = json.loads(path.read_text(encoding="utf-8"))
         scene.setdefault("walls", [])
+        scene.setdefault("fogOpacity", 1.0)
         self.scenes[scene_id] = scene
         return scene
 
@@ -322,18 +327,12 @@ class SceneStore:
         self,
         scene_id: SceneId,
         wall_id: str,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
+        points: List[Dict[str, float]],
     ) -> bool:
         scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
         for wall in scene.get("walls", []):
             if wall.get("wallId") == wall_id:
-                wall["x1"] = x1
-                wall["y1"] = y1
-                wall["x2"] = x2
-                wall["y2"] = y2
+                wall["points"] = [dict(pt) for pt in (points or [])]
                 self.save_scene(scene)
                 return True
         return False
@@ -352,6 +351,13 @@ class SceneStore:
         scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
         scene["walls"] = []
         self.save_scene(scene)
+
+    def set_fog_opacity(self, scene_id: SceneId, fog_opacity: float) -> float:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        clamped = max(0.0, min(1.0, float(fog_opacity)))
+        scene["fogOpacity"] = clamped
+        self.save_scene(scene)
+        return clamped
 
 
 class SceneHistory:
@@ -1096,8 +1102,9 @@ def socket_add_wall(data: Optional[Dict[str, Any]]) -> None:
         return
     scene_id = (data or {}).get("sceneId")
     wall = (data or {}).get("wall")
-    if not scene_id or not wall or not wall.get("wallId"):
+    if not scene_id or not wall or not wall.get("wallId") or not wall.get("points"):
         return
+    wall["points"] = [dict(pt) for pt in wall.get("points", [])]
     history.before_mutation(scene_id)
     scene_store.add_wall(scene_id, wall)
     socketio.emit("addWall", {"sceneId": scene_id, "wall": wall}, to="dm")
@@ -1112,17 +1119,11 @@ def socket_update_wall(data: Optional[Dict[str, Any]]) -> None:
         return
     scene_id = (data or {}).get("sceneId")
     wall_id = (data or {}).get("wallId")
-    if not scene_id or not wall_id:
+    points = (data or {}).get("points")
+    if not scene_id or not wall_id or not points:
         return
     history.before_mutation(scene_id)
-    updated = scene_store.update_wall(
-        scene_id,
-        wall_id,
-        float((data or {}).get("x1", 0)),
-        float((data or {}).get("y1", 0)),
-        float((data or {}).get("x2", 0)),
-        float((data or {}).get("y2", 0)),
-    )
+    updated = scene_store.update_wall(scene_id, wall_id, points)
     if updated:
         scene = scene_store.load_scene(scene_id)
         updated_wall = next((w for w in scene.get("walls", []) if w.get("wallId") == wall_id), {})
@@ -1162,6 +1163,21 @@ def socket_clear_walls(data: Optional[Dict[str, Any]]) -> None:
     socketio.emit("wallsData", {"sceneId": scene_id, "walls": []}, to="player")
     can_undo, can_redo = history.state(scene_id)
     socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
+
+
+@socketio.on("setFogOpacity")
+def socket_set_fog_opacity(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    target_scene_id = (data or {}).get("sceneId") or scene_store.active_scene_id
+    if not target_scene_id:
+        return
+    try:
+        raw_value = float((data or {}).get("fogOpacity"))
+    except (TypeError, ValueError):
+        return
+    clamped = scene_store.set_fog_opacity(target_scene_id, raw_value)
+    socketio.emit("fogOpacity", {"sceneId": target_scene_id, "fogOpacity": clamped})
 
 
 @socketio.on("playTrack")

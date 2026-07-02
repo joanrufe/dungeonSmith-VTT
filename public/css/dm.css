@@ -584,9 +584,45 @@
   text-align: center;
 }
 
+/* ── War Fog Panel ──────────────────────────────────────── */
+#warfog-panel { top: 50px; right: 110px; width: 230px; }
+
+.warfog-opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.warfog-opacity-label {
+  color: #ccc;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.warfog-opacity-display {
+  min-width: 44px;
+  text-align: right;
+  color: var(--ss-orange);
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.warfog-hint {
+  margin: 10px 0 0;
+  padding: 6px;
+  background: rgba(255,255,255,0.045);
+  color: var(--ss-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
 .wall-overlay-line {
-  stroke: rgba(255, 122, 24, 0.55);
-  stroke-width: 3;
+  fill: rgba(255, 122, 24, 0.18);
+  stroke: rgba(255, 122, 24, 0.7);
+  stroke-width: 2;
+  stroke-linejoin: round;
   stroke-linecap: round;
 }
 

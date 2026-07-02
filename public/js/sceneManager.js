@@ -29,12 +29,15 @@
  */
 
 /**
+ * @typedef {Object} WallPointDict
+ * @property {number} x
+ * @property {number} y
+ */
+
+/**
  * @typedef {Object} WallDict
  * @property {string} wallId
- * @property {number} x1
- * @property {number} y1
- * @property {number} x2
- * @property {number} y2
+ * @property {WallPointDict[]} points
  */
 
 /**
@@ -126,11 +129,11 @@ export class SceneManager {
       this.sceneRenderer.setWalls(this.currentScene.walls);
     });
 
-    this.socket.on('updateWall', ({ sceneId, wallId, x1, y1, x2, y2 }) => {
-      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
-      const wall = (this.currentScene.walls || []).find(w => w.wallId === wallId);
+    this.socket.on('updateWall', (payload) => {
+      if (!this.currentScene || this.currentScene.sceneId !== payload.sceneId) return;
+      const wall = (this.currentScene.walls || []).find(w => w.wallId === payload.wallId);
       if (!wall) return;
-      wall.x1 = x1; wall.y1 = y1; wall.x2 = x2; wall.y2 = y2;
+      wall.points = payload.points;
       this.sceneRenderer.setWalls(this.currentScene.walls);
     });
 
@@ -150,6 +153,14 @@ export class SceneManager {
       if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
       this.currentScene.walls = walls || [];
       this.sceneRenderer.setWalls(this.currentScene.walls);
+    });
+
+    this.socket.on('fogOpacity', ({ sceneId, fogOpacity }) => {
+      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
+      const v = Math.max(0, Math.min(1, Number(fogOpacity) || 0));
+      this.currentScene.fogOpacity = v;
+      // warFogTool owns the slider UI; it listens for fogOpacity too
+      // and updates itself. Nothing else for the scene manager to do.
     });
 
     // Add other socket event handlers as needed

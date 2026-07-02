@@ -78,6 +78,23 @@ No existing Socket.IO or HTTP payload shape SHALL change; wall mutations SHALL u
 - WHEN `sceneData` reaches a player
 - THEN token payloads and top-level keys match pre-wall shapes
 
+### Requirement: Per-Scene Fog Opacity
+
+The scene JSON schema SHALL accept an optional `fogOpacity: float` (default `1.0`,
+clamped to `[0, 1]` on write). The DM SHALL be able to set it via the dedicated
+`War Fog` tray tool and the `setFogOpacity` Socket.IO event; updates SHALL
+broadcast to all clients so the player fog overlay re-renders.
+`fogOpacity` travels as an ordinary top-level scene property in `sceneData`
+and is **not** secret (included in the player payload).
+
+#### Scenario: DM changes fog opacity and player sees it
+
+- GIVEN an active scene
+- WHEN the DM emits `setFogOpacity { sceneId, fogOpacity: 0.5 }`
+- THEN the server clamps to `[0, 1]`, persists the value, and broadcasts
+  `fogOpacity { sceneId, fogOpacity: 0.5 }` to DM and player rooms
+- AND the player's `sceneRenderer.drawFog()` uses the new opacity
+
 ### Requirement: Test Coverage
 
 The project SHALL add pytest smoke tests for wall CRUD, filtering, and occlusion. Existing tests MUST pass.

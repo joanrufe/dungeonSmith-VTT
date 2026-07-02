@@ -79,6 +79,15 @@ socket.on('wallsData', ({ sceneId, walls }) => {
   sceneRenderer.setWalls(currentScene.walls);
 });
 
+// Per-scene fog opacity (DM-controlled). Initial value comes in via
+// sceneData.fogOpacity; this handler keeps it current after DM changes.
+socket.on('fogOpacity', ({ sceneId, fogOpacity }) => {
+  if (!currentScene || currentScene.sceneId !== sceneId) return;
+  const v = Math.max(0, Math.min(1, Number(fogOpacity) || 0));
+  currentScene.fogOpacity = v;
+  sceneRenderer.setFogOpacity(v);
+});
+
 // Function to render a scene
 function renderScene(scene) {
   sceneRenderer.renderScene(scene);

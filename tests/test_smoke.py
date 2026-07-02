@@ -284,12 +284,20 @@ def test_wall_add_persists(dm_socket, tmp_data):
     """DM emits addWall; wall persists in scene JSON and is broadcast back."""
     scene_id = _make_scene_with_walls(dm_socket, tmp_data)
 
-    wall = {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0}
+    wall = {
+        "wallId": "w1",
+        "points": [
+            {"x": 0.0, "y": 0.0},
+            {"x": 100.0, "y": 0.0},
+            {"x": 100.0, "y": 50.0},
+        ],
+    }
     dm_socket.emit("addWall", {"sceneId": scene_id, "wall": wall})
 
     scene = app_module.scene_store.load_scene(scene_id)
     assert len(scene["walls"]) == 1
     assert scene["walls"][0]["wallId"] == "w1"
+    assert scene["walls"][0]["points"] == wall["points"]
 
     received = dm_socket.get_received()
     add_events = [e for e in received if e["name"] == "addWall"]
@@ -304,7 +312,14 @@ def test_player_scene_data_omits_walls_but_receives_walls_data(player_socket, dm
         "sceneName": "WallScene2",
         "tokens": [],
         "walls": [
-            {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+            {
+                "wallId": "w1",
+                "points": [
+                    {"x": 0.0, "y": 0.0},
+                    {"x": 100.0, "y": 0.0},
+                    {"x": 100.0, "y": 50.0},
+                ],
+            },
         ],
     }
     app_module.scene_store.active_scene_id = scene_id
@@ -323,6 +338,7 @@ def test_player_scene_data_omits_walls_but_receives_walls_data(player_socket, dm
     assert walls_payload["sceneId"] == scene_id
     assert len(walls_payload["walls"]) == 1
     assert walls_payload["walls"][0]["wallId"] == "w1"
+    assert walls_payload["walls"][0]["points"][0] == {"x": 0.0, "y": 0.0}
 
 
 def test_dm_scene_data_includes_walls(dm_socket, tmp_data):
@@ -333,7 +349,14 @@ def test_dm_scene_data_includes_walls(dm_socket, tmp_data):
         "sceneName": "WallScene3",
         "tokens": [],
         "walls": [
-            {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+            {
+                "wallId": "w1",
+                "points": [
+                    {"x": 0.0, "y": 0.0},
+                    {"x": 100.0, "y": 0.0},
+                    {"x": 100.0, "y": 50.0},
+                ],
+            },
         ],
     }
     app_module.scene_store.active_scene_id = scene_id
@@ -345,33 +368,49 @@ def test_dm_scene_data_includes_walls(dm_socket, tmp_data):
     payload = scene_data_events[-1]["args"][0]
     assert "walls" in payload, "DM sceneData must include walls"
     assert payload["walls"][0]["wallId"] == "w1"
+    assert payload["walls"][0]["points"][0] == {"x": 0.0, "y": 0.0}
 
 
 def test_update_wall(dm_socket, tmp_data):
-    """DM emits updateWall; endpoints are mutated and broadcast."""
+    """DM emits updateWall; the polygon's points are mutated and broadcast."""
     scene_id = _make_scene_with_walls(dm_socket, tmp_data, walls=[
-        {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+        {
+            "wallId": "w1",
+            "points": [
+                {"x": 0.0, "y": 0.0},
+                {"x": 100.0, "y": 0.0},
+                {"x": 100.0, "y": 50.0},
+            ],
+        },
     ])
 
+    new_points = [
+        {"x": 10.0, "y": 20.0},
+        {"x": 30.0, "y": 40.0},
+        {"x": 50.0, "y": 60.0},
+    ]
     dm_socket.emit("updateWall", {
         "sceneId": scene_id,
         "wallId": "w1",
-        "x1": 10.0, "y1": 20.0, "x2": 30.0, "y2": 40.0,
+        "points": new_points,
     })
 
     scene = app_module.scene_store.load_scene(scene_id)
     wall = scene["walls"][0]
-    assert wall["x1"] == 10.0
-    assert wall["y1"] == 20.0
-    assert wall["x2"] == 30.0
-    assert wall["y2"] == 40.0
+    assert wall["points"] == new_points
 
 
 def test_remove_wall(dm_socket, tmp_data):
     """DM emits removeWall; the wall is deleted."""
     scene_id = _make_scene_with_walls(dm_socket, tmp_data, walls=[
-        {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
-        {"wallId": "w2", "x1": 0.0, "y1": 0.0, "x2": 0.0, "y2": 100.0},
+        {
+            "wallId": "w1",
+            "points": [{"x": 0.0, "y": 0.0}, {"x": 50.0, "y": 0.0}, {"x": 50.0, "y": 50.0}],
+        },
+        {
+            "wallId": "w2",
+            "points": [{"x": 0.0, "y": 0.0}, {"x": 0.0, "y": 100.0}, {"x": 50.0, "y": 100.0}],
+        },
     ])
 
     dm_socket.emit("removeWall", {"sceneId": scene_id, "wallId": "w1"})
@@ -384,7 +423,10 @@ def test_remove_wall(dm_socket, tmp_data):
 def test_clear_walls(dm_socket, tmp_data):
     """DM emits clearWalls; all walls are removed."""
     scene_id = _make_scene_with_walls(dm_socket, tmp_data, walls=[
-        {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+        {
+            "wallId": "w1",
+            "points": [{"x": 0.0, "y": 0.0}, {"x": 50.0, "y": 0.0}, {"x": 50.0, "y": 50.0}],
+        },
     ])
 
     dm_socket.emit("clearWalls", {"sceneId": scene_id})
@@ -397,7 +439,10 @@ def test_wall_undo_redo(dm_socket, tmp_data):
     """Add wall -> undo removes it -> redo restores it."""
     scene_id = _make_scene_with_walls(dm_socket, tmp_data)
 
-    wall = {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0}
+    wall = {
+        "wallId": "w1",
+        "points": [{"x": 0.0, "y": 0.0}, {"x": 50.0, "y": 0.0}, {"x": 50.0, "y": 50.0}],
+    }
     dm_socket.emit("addWall", {"sceneId": scene_id, "wall": wall})
     assert len(app_module.scene_store.load_scene(scene_id)["walls"]) == 1
 
@@ -408,6 +453,7 @@ def test_wall_undo_redo(dm_socket, tmp_data):
     scene = app_module.scene_store.load_scene(scene_id)
     assert len(scene["walls"]) == 1
     assert scene["walls"][0]["wallId"] == "w1"
+    assert scene["walls"][0]["points"] == wall["points"]
 
 
 def test_wall_history_preserves_tokens(dm_socket, tmp_data):
@@ -427,7 +473,10 @@ def test_wall_history_preserves_tokens(dm_socket, tmp_data):
         "hidden": False,
     })
 
-    wall = {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0}
+    wall = {
+        "wallId": "w1",
+        "points": [{"x": 0.0, "y": 0.0}, {"x": 50.0, "y": 0.0}, {"x": 50.0, "y": 50.0}],
+    }
     dm_socket.emit("addWall", {"sceneId": scene_id, "wall": wall})
 
     dm_socket.emit("undo", {"sceneId": scene_id})
@@ -444,7 +493,10 @@ def test_duplicate_scene_deep_copies_walls(dm_client, tmp_data):
         "sceneName": "Original",
         "tokens": [],
         "walls": [
-            {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+            {
+                "wallId": "w1",
+                "points": [{"x": 0.0, "y": 0.0}, {"x": 50.0, "y": 0.0}, {"x": 50.0, "y": 50.0}],
+            },
         ],
     }
     app_module.scene_store.save_scene(app_module.scene_store.scenes[scene_id])
@@ -460,7 +512,152 @@ def test_duplicate_scene_deep_copies_walls(dm_client, tmp_data):
     new_scene = app_module.scene_store.load_scene(new_id)
     assert len(new_scene["walls"]) == 1
     assert new_scene["walls"][0]["wallId"] == "w1"
+    assert new_scene["walls"][0]["points"] == [
+        {"x": 0.0, "y": 0.0}, {"x": 50.0, "y": 0.0}, {"x": 50.0, "y": 50.0}
+    ]
     # Mutation independence
-    new_scene["walls"][0]["x1"] = 999.0
+    new_scene["walls"][0]["points"][0]["x"] = 999.0
     original = app_module.scene_store.load_scene(scene_id)
-    assert original["walls"][0]["x1"] == 0.0
+    assert original["walls"][0]["points"][0]["x"] == 0.0
+
+
+# ── War Fog (per-scene fog opacity) smoke tests ─────────────────────────────
+
+
+def test_fog_opacity_default_is_1(dm_socket, tmp_data):
+    """A scene with no fogOpacity key loads with fogOpacity=1.0 and the
+    value reaches the DM via sceneData."""
+    scene_id = "warfog-default-scene"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "WarFogDefault",
+        "tokens": [],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["fogOpacity"] == 1.0
+
+    dm_socket.emit("loadScene", {"sceneId": scene_id})
+    received = dm_socket.get_received()
+    scene_data_events = [e for e in received if e["name"] == "sceneData"]
+    assert scene_data_events, "Expected sceneData event for DM"
+    payload = scene_data_events[-1]["args"][0]
+    assert payload.get("fogOpacity") == 1.0
+
+
+def test_player_scene_data_includes_fog_opacity(player_socket, tmp_data):
+    """fogOpacity is not secret: player sceneData includes it for renderer init."""
+    scene_id = "warfog-player-scene"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "WarFogPlayer",
+        "tokens": [],
+        "fogOpacity": 0.4,
+    }
+    app_module.scene_store.active_scene_id = scene_id
+
+    player_socket.emit("loadScene", {"sceneId": scene_id})
+    received = player_socket.get_received()
+    scene_data_events = [e for e in received if e["name"] == "sceneData"]
+    assert scene_data_events, "Expected sceneData event for player"
+    payload = scene_data_events[-1]["args"][0]
+    assert payload.get("fogOpacity") == 0.4
+
+
+def test_dm_set_fog_opacity_persists(dm_socket, tmp_data):
+    """DM emits setFogOpacity; value is persisted in the scene JSON."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data)
+
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": 0.5})
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["fogOpacity"] == 0.5
+
+    # And subsequent loadScene echoes the new value
+    dm_socket.emit("loadScene", {"sceneId": scene_id})
+    received = dm_socket.get_received()
+    scene_data_events = [e for e in received if e["name"] == "sceneData"]
+    payload = scene_data_events[-1]["args"][0]
+    assert payload.get("fogOpacity") == 0.5
+
+
+def test_set_fog_opacity_clamped_to_unit_range(dm_socket, tmp_data):
+    """Out-of-range fogOpacity values are clamped to [0, 1]."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data)
+
+    # Above 1 → 1
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": 2.5})
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["fogOpacity"] == 1.0
+
+    # Below 0 → 0
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": -0.5})
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["fogOpacity"] == 0.0
+
+    # Boundary: 0 and 1 are preserved
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": 0})
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["fogOpacity"] == 0.0
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": 1})
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["fogOpacity"] == 1.0
+
+
+def test_player_receives_fog_opacity_broadcast(dm_socket, player_socket, tmp_data):
+    """When the DM changes fogOpacity, the player receives the broadcast."""
+    scene_id = "warfog-broadcast-scene"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "WarFogBroadcast",
+        "tokens": [],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+
+    # Player loads first
+    player_socket.emit("loadScene", {"sceneId": scene_id})
+    player_socket.get_received()  # clear
+
+    # DM changes fog opacity
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": 0.6})
+
+    received = player_socket.get_received()
+    fog_events = [e for e in received if e["name"] == "fogOpacity"]
+    assert fog_events, "Expected fogOpacity broadcast to player"
+    payload = fog_events[-1]["args"][0]
+    assert payload["sceneId"] == scene_id
+    assert payload["fogOpacity"] == 0.6
+
+
+def test_set_fog_opacity_requires_dm(player_socket, tmp_data):
+    """Non-DM socket cannot mutate fogOpacity (the event is silently dropped)."""
+    scene_id = "warfog-dm-only-scene"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "WarFogDmOnly",
+        "tokens": [],
+        "fogOpacity": 0.8,
+    }
+    app_module.scene_store.active_scene_id = scene_id
+
+    player_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": 0.2})
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["fogOpacity"] == 0.8, "Player must not be able to change fogOpacity"
+
+
+def test_set_fog_opacity_invalid_value_ignored(dm_socket, tmp_data):
+    """Non-numeric or missing fogOpacity payload leaves the scene untouched."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data)
+    # Seed a known value
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": 0.3})
+    assert app_module.scene_store.load_scene(scene_id)["fogOpacity"] == 0.3
+
+    # Bogus payload
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id, "fogOpacity": "not-a-number"})
+    assert app_module.scene_store.load_scene(scene_id)["fogOpacity"] == 0.3
+
+    dm_socket.emit("setFogOpacity", {"sceneId": scene_id})  # missing key
+    assert app_module.scene_store.load_scene(scene_id)["fogOpacity"] == 0.3
+

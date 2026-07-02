@@ -97,6 +97,8 @@
         <tr><td><kbd>Scroll</kbd></td><td>Zoom in / out</td></tr>
         <tr><td><kbd>Middle-click drag</kbd></td><td>Pan the scene</td></tr>
         <tr><td><kbd>Ctrl + drag</kbd></td><td>Pan the scene</td></tr>
+        <tr><td><kbd>W</kbd></td><td>Open / close the Wall Tools panel</td></tr>
+        <tr><td><kbd>F</kbd></td><td>Open / close the War Fog panel</td></tr>
         <tr><td><kbd>Ruler</kbd></td><td>Measure distance at 5 ft per grid cell</td></tr>
         <tr><th colspan="2">Scenes</th></tr>
         <tr><td><kbd>Shift+D</kbd></td><td>Delete current scene</td></tr>
@@ -116,6 +118,7 @@
     <button id="ae-toggle-btn"    class="tray-btn" title="Effects"><i class="fa-solid fa-bullseye"></i><span>Effects</span></button>
     <button id="notes-toggle-btn" class="tray-btn" title="Sticky Notes"><i class="fa-solid fa-note-sticky"></i><span>Notes</span></button>
     <button id="walls-toggle-btn" class="tray-btn" title="Wall Tools (W)"><i class="fa-solid fa-vector-square"></i><span>Walls</span></button>
+    <button id="warfog-toggle-btn" class="tray-btn" title="War Fog (F)"><i class="fa-solid fa-cloud"></i><span>Fog</span></button>
     <button id="dice-toggle-btn"  class="tray-btn" title="Dice Roller"><i class="fa-solid fa-dice-d20"></i><span>Dice</span></button>
     <button id="music-toggle-btn" class="tray-btn" title="Music Panel"><i class="fa-solid fa-music"></i><span>Music</span></button>
   </div>
@@ -262,7 +265,18 @@
       </label>
     </div>
     <button id="walls-clear-btn" class="walls-clear-btn"><i class="fa-solid fa-trash-can"></i> Clear All</button>
-    <p class="walls-hint">Drag to draw. Click endpoint to move. Delete removes selected wall.</p>
+    <p class="walls-hint">Click to add vertices. Click the first vertex (or double-click) to close. Esc cancels. Click polygon to move it. Delete removes selected.</p>
+  </div>
+
+  <!-- ═══ WAR FOG PANEL (floating pop-out) ═══ -->
+  <div id="warfog-panel" class="draggable-panel panel-hidden">
+    <div class="panel-drag-handle"><span><i class="fa-solid fa-cloud"></i> War Fog</span><span class="drag-hint">☰</span></div>
+    <div class="warfog-opacity-row">
+      <span class="warfog-opacity-label">Fog opacity</span>
+      <input type="range" id="warfog-opacity-slider" min="0" max="1" step="0.01" value="1" style="flex:1;accent-color:#ff7a18;">
+      <span id="warfog-opacity-display" class="warfog-opacity-display">100%</span>
+    </div>
+    <p class="warfog-hint">Per-scene fog darkness shown to players. 0% = no fog, 100% = full darkness (default). Lives here so future fog settings can join the panel.</p>
   </div>
 
   <!-- ═══ DICE PANEL (floating pop-out) ═══ -->
@@ -392,6 +406,7 @@
   <script src="/js/stickyNotes.js"></script>
   <script src="/js/areaEffects.js"></script>
   <script src="/js/wallsTool.js"></script>
+  <script src="/js/warFogTool.js"></script>
   <script type="module" src="/js/diceRoller.js"></script>
 </body>
 
