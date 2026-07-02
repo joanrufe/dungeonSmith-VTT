@@ -415,16 +415,17 @@ export class SceneRenderer {
 
   /**
    * Draw the fog overlay:
-   * 1. Fill the entire canvas with semi-opaque dark fog.
-   * 2. For each vision source (visible, non-map, non-paint, non-area-effect
-   *    token with visionRadius > 0), punch a radial gradient vision circle
-   *    with `destination-out`.
-   * 3. For every wall polygon whose bounding box overlaps the vision circle,
-   *    paint the polygon back with the fog colour so the wall re-occludes
-   *    any light that would otherwise pass through it.
+   * 1. Fill the entire canvas with the per-scene fog colour.
+   * 2. For each vision source, punch a radial gradient vision circle with
+   *    `destination-out`. The gradient gives a soft halo that extends to
+   *    the full vision radius, so light "spills" around walls naturally.
+   * 3. Re-occlude light inside any wall polygon that overlaps a vision
+   *    circle (walls are physical light-blockers and always fully opaque).
    *
-   * Walls are closed opaque polygons: their interior is always dark, which
-   * is exactly what a real light-blocking wall should do.
+   * The radial gradient of the vision circle handles the soft "spill" around
+   * walls. The wall polygons are subtracted as opaque masks on top, so any
+   * area inside a wall stays dark. This avoids the spurious straight edges
+   * that a visibility-polygon approach would introduce between wall vertices.
    */
   drawFog() {
     const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById('fog-canvas'));
@@ -461,7 +462,7 @@ export class SceneRenderer {
     ctx.fillStyle = fogFill;
     ctx.fillRect(0, 0, w, h);
 
-    // Step 2: cut vision holes (unobstructed radial gradients)
+    // Step 2: cut vision holes (soft radial gradient per source)
     ctx.globalCompositeOperation = 'destination-out';
     for (const token of visionSources) {
       if (token.isMap)        continue;
@@ -477,56 +478,128 @@ export class SceneRenderer {
       this._drawRadialVisionHole(ctx, cx, cy, sr);
     }
 
-    // Step 3: re-occlude light inside any wall polygon that overlaps a
-    // vision circle. Walls are opaque masks, so anything inside them stays
-    // in fog.
+    // Step 3: wall occlusion + shadow projection
+    //
+    // For each vision source that overlaps a wall, compute a visibility
+    // polygon by raycasting toward wall vertices (with dense fallback
+    // rays so polygon edges follow the circle smoothly).  Paint that
+    // polygon with a clipped radial gradient (Step 2 already handled the
+    // no-walls case).  Then paint each wall polygon as a fully-opaque mask
+    // on top to re-occlude light inside the wall.
     if (walls.length === 0) {
       ctx.globalCompositeOperation = 'source-over';
       return;
     }
-    ctx.globalCompositeOperation = 'source-over';
-    // Walls are physical light-blockers: they must always be fully opaque,
-    // independent of the per-scene fogOpacity setting.
-    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.globalCompositeOperation = 'destination-out';
 
     for (const token of visionSources) {
-      if (token.isMap)        continue;
-      if (token.isPaintTile)  continue;
-      if (token.isAreaEffect) continue;
       const radius = token.visionRadius;
       if (!radius || radius <= 0) continue;
-
       const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
       const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
       const sr = radius * this.scale;
 
-      // Bounding box of the vision circle in screen space
-      const minX = cx - sr, maxX = cx + sr;
-      const minY = cy - sr, maxY = cy + sr;
-
+      // Check if the vision circle actually overlaps any wall
+      let nearWall = false;
       for (const wall of walls) {
         const pts = wall.points;
-        // World-space bounding box of the polygon → screen-space
         let pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
         for (const p of pts) {
           const sx = (p.x + this.offsetX) * this.scale;
           const sy = (p.y + this.offsetY) * this.scale;
-          if (sx < pMinX) pMinX = sx;
-          if (sy < pMinY) pMinY = sy;
-          if (sx > pMaxX) pMaxX = sx;
-          if (sy > pMaxY) pMaxY = sy;
+          if (sx < pMinX) pMinX = sx; if (sy < pMinY) pMinY = sy;
+          if (sx > pMaxX) pMaxX = sx; if (sy > pMaxY) pMaxY = sy;
         }
-        if (pMaxX < minX || pMinX > maxX || pMaxY < minY || pMinY > maxY) continue;
+        if (pMaxX >= cx - sr && pMinX <= cx + sr && pMaxY >= cy - sr && pMinY <= cy + sr) {
+          nearWall = true;
+          break;
+        }
+      }
+      if (!nearWall) {
+        this._drawRadialVisionHole(ctx, cx, cy, sr);
+        continue;
+      }
 
-        ctx.beginPath();
-        const first = pts[0];
-        ctx.moveTo((first.x + this.offsetX) * this.scale, (first.y + this.offsetY) * this.scale);
-        for (let i = 1; i < pts.length; i++) {
-          const p = pts[i];
-          ctx.lineTo((p.x + this.offsetX) * this.scale, (p.y + this.offsetY) * this.scale);
+      const points = this._computeVisibilityPolygon(cx, cy, sr, walls);
+      if (points.length < 3) continue;
+
+      // Paint a soft radial gradient clipped to the visibility polygon.
+      // With 360+ fallback rays the polygon edges that lie on the circle
+      // arc are short enough (≈3 px chords) to be imperceptible.
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.closePath();
+      ctx.clip();
+
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, sr);
+      grad.addColorStop(0,    'rgba(0,0,0,1)');
+      grad.addColorStop(0.7,  'rgba(0,0,0,0.9)');
+      grad.addColorStop(0.92, 'rgba(0,0,0,0.3)');
+      grad.addColorStop(1,    'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(cx, cy, sr, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Now paint every wall polygon as fully opaque, AND paint the
+    // "shadow sector" behind each wall edge: the area bounded by the
+    // edge and the two rays from the source through its endpoints
+    // extended to the vision circle.  This makes the shadow behind the
+    // wall completely opaque — no light leaks through.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    for (const wall of walls) {
+      const pts = wall.points;
+      const n = pts.length;
+      if (n < 3) continue;
+
+      // Wall polygon
+      ctx.beginPath();
+      ctx.moveTo((pts[0].x + this.offsetX) * this.scale, (pts[0].y + this.offsetY) * this.scale);
+      for (let i = 1; i < n; i++) {
+        ctx.lineTo((pts[i].x + this.offsetX) * this.scale, (pts[i].y + this.offsetY) * this.scale);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Shadow sectors behind each edge
+      for (const token of visionSources) {
+        const radius = token.visionRadius;
+        if (!radius || radius <= 0) continue;
+        const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
+        const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
+        const sr = radius * this.scale;
+
+        for (let i = 0; i < n; i++) {
+          const a = pts[i];
+          const b = pts[(i + 1) % n];
+          const ax = (a.x + this.offsetX) * this.scale;
+          const ay = (a.y + this.offsetY) * this.scale;
+          const bx = (b.x + this.offsetX) * this.scale;
+          const by = (b.y + this.offsetY) * this.scale;
+
+          const angleA = Math.atan2(ay - cy, ax - cx);
+          const angleB = Math.atan2(by - cy, bx - cx);
+
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          // Ray from B outward to the circle edge
+          ctx.lineTo(cx + Math.cos(angleB) * sr, cy + Math.sin(angleB) * sr);
+          // Arc along the circle from angleB to angleA (shortest path =
+          // the side of the circle that the wall edge is on)
+          const diff = ((angleA - angleB) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+          const ccw = diff > Math.PI;
+          ctx.arc(cx, cy, sr, angleB, angleA, ccw);
+          ctx.closePath(); // ray back to ax, ay
+          ctx.fill();
         }
-        ctx.closePath();
-        ctx.fill();
       }
     }
 
@@ -540,11 +613,86 @@ export class SceneRenderer {
   _drawRadialVisionHole(ctx, cx, cy, sr) {
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, sr);
     grad.addColorStop(0,    'rgba(0,0,0,1)');
-    grad.addColorStop(0.75, 'rgba(0,0,0,0.9)');
+    grad.addColorStop(0.7,  'rgba(0,0,0,0.9)');
+    grad.addColorStop(0.92, 'rgba(0,0,0,0.3)');
     grad.addColorStop(1,    'rgba(0,0,0,0)');
     ctx.beginPath();
     ctx.arc(cx, cy, sr, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
+  }
+
+  /**
+   * Compute a visibility polygon for a vision source at (cx, cy) with radius
+   * sr, bounded by the supplied wall polygons. Casts rays toward every wall
+   * vertex (with ±ε angular offsets to avoid slivers) plus a dense fallback
+   * ring so chords on the circle are imperceptibly short.
+   */
+  _computeVisibilityPolygon(cx, cy, sr, walls) {
+    const EPS_ANG = 0.0002;
+    const FALLBACK_RAYS = 360;
+    const angles = new Set();
+
+    for (const wall of walls) {
+      const pts = wall.points;
+      for (const p of pts) {
+        const sx = (p.x + this.offsetX) * this.scale;
+        const sy = (p.y + this.offsetY) * this.scale;
+        const a = Math.atan2(sy - cy, sx - cx);
+        angles.add(a - EPS_ANG);
+        angles.add(a);
+        angles.add(a + EPS_ANG);
+      }
+    }
+
+    for (let i = 0; i < FALLBACK_RAYS; i++) {
+      angles.add((Math.PI * 2 * i) / FALLBACK_RAYS);
+    }
+
+    const sorted = Array.from(angles).sort((a, b) => a - b);
+    const points = [];
+
+    for (const angle of sorted) {
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      let minT = sr;
+
+      for (const wall of walls) {
+        const pts = wall.points;
+        const n = pts.length;
+        for (let i = 0; i < n; i++) {
+          const a = pts[i];
+          const b = pts[(i + 1) % n];
+          const ax = (a.x + this.offsetX) * this.scale;
+          const ay = (a.y + this.offsetY) * this.scale;
+          const bx = (b.x + this.offsetX) * this.scale;
+          const by = (b.y + this.offsetY) * this.scale;
+          const t = this._raySegmentT(cx, cy, dx, dy, ax, ay, bx, by);
+          if (t !== null && t < minT) minT = t;
+        }
+      }
+
+      points.push({ x: cx + dx * minT, y: cy + dy * minT });
+    }
+
+    return points;
+  }
+
+  /**
+   * Ray-segment intersection. Returns the parametric distance t along the
+   * ray from the origin to the intersection point, or null if the segment
+   * is not hit within the ray's range.
+   */
+  _raySegmentT(ox, oy, dx, dy, x1, y1, x2, y2) {
+    const sdx = x2 - x1;
+    const sdy = y2 - y1;
+    const denom = dx * sdy - dy * sdx;
+    if (Math.abs(denom) < 1e-10) return null;
+
+    const t = ((x1 - ox) * sdy - (y1 - oy) * sdx) / denom;
+    const u = ((x1 - ox) * dy - (y1 - oy) * dx) / denom;
+
+    if (t > 1e-6 && u >= 0 && u <= 1) return t;
+    return null;
   }
 }
