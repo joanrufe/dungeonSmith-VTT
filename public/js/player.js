@@ -61,12 +61,22 @@ function loadScene(sceneId) {
 // Handle receiving scene data
 socket.on('sceneData', (scene) => {
   currentScene = scene;
+  currentScene.walls = [];
+  sceneRenderer.walls = [];
   renderScene(scene);
 
   if (pendingSnapView && pendingSnapView.sceneId === scene.sceneId) {
     panZoomHandler.applyView(pendingSnapView.scale, pendingSnapView.offsetX, pendingSnapView.offsetY);
     pendingSnapView = null;
   }
+});
+
+// Wall geometry is delivered separately so player LOS works while the
+// main sceneData contract stays wall-free.
+socket.on('wallsData', ({ sceneId, walls }) => {
+  if (!currentScene || currentScene.sceneId !== sceneId) return;
+  currentScene.walls = walls || [];
+  sceneRenderer.setWalls(currentScene.walls);
 });
 
 // Function to render a scene

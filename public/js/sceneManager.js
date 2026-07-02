@@ -29,10 +29,20 @@
  */
 
 /**
+ * @typedef {Object} WallDict
+ * @property {string} wallId
+ * @property {number} x1
+ * @property {number} y1
+ * @property {number} x2
+ * @property {number} y2
+ */
+
+/**
  * @typedef {Object} SceneDict
  * @property {string}      sceneId
  * @property {string}      sceneName
  * @property {TokenDict[]} tokens
+ * @property {WallDict[]}  [walls]
  * @property {number}      [order]
  */
 
@@ -53,6 +63,7 @@ export class SceneManager {
     this.sceneRenderer = sceneRenderer;
     this.tokenManager = tokenManager;
     this.sceneContainer = sceneContainer;
+    this.isDM = true;
     this.currentScene = null;
     this.selectedTokenId = null;
     this.selectedTokenIds = new Set();
@@ -106,6 +117,39 @@ export class SceneManager {
 
     this.socket.on('pingScene', (data) => {
       this.drawPing(data);
+    });
+
+    this.socket.on('addWall', ({ sceneId, wall }) => {
+      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
+      if (!this.currentScene.walls) this.currentScene.walls = [];
+      this.currentScene.walls.push(wall);
+      this.sceneRenderer.setWalls(this.currentScene.walls);
+    });
+
+    this.socket.on('updateWall', ({ sceneId, wallId, x1, y1, x2, y2 }) => {
+      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
+      const wall = (this.currentScene.walls || []).find(w => w.wallId === wallId);
+      if (!wall) return;
+      wall.x1 = x1; wall.y1 = y1; wall.x2 = x2; wall.y2 = y2;
+      this.sceneRenderer.setWalls(this.currentScene.walls);
+    });
+
+    this.socket.on('removeWall', ({ sceneId, wallId }) => {
+      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
+      this.currentScene.walls = (this.currentScene.walls || []).filter(w => w.wallId !== wallId);
+      this.sceneRenderer.setWalls(this.currentScene.walls);
+    });
+
+    this.socket.on('clearWalls', ({ sceneId }) => {
+      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
+      this.currentScene.walls = [];
+      this.sceneRenderer.setWalls([]);
+    });
+
+    this.socket.on('wallsData', ({ sceneId, walls }) => {
+      if (!this.currentScene || this.currentScene.sceneId !== sceneId) return;
+      this.currentScene.walls = walls || [];
+      this.sceneRenderer.setWalls(this.currentScene.walls);
     });
 
     // Add other socket event handlers as needed
@@ -292,6 +336,8 @@ export class SceneManager {
    */
   onSceneData(scene) {
     this.currentScene = scene;
+    this.currentScene.walls = scene.walls || [];
+    this.sceneRenderer.walls = this.currentScene.walls;
     scene.tokens.forEach(t => { t.sceneId = scene.sceneId; });
     this.clearSelection();
     this.renderScene(scene);

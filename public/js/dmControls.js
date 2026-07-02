@@ -155,6 +155,7 @@
     setupPanelToggle('ae-toggle-btn',    'area-effect-panel');
     setupPanelToggle('dice-toggle-btn',  'dice-panel');
     setupPanelToggle('music-toggle-btn', 'music-panel');
+    setupPanelToggle('walls-toggle-btn', 'walls-panel');
 
     // ── Make panels draggable ─────────────────────────────
     makeDraggable(document.getElementById('initiative-panel'));
@@ -163,6 +164,17 @@
     makeDraggable(document.getElementById('notes-panel'));
     makeDraggable(document.getElementById('music-panel'));
     makeDraggable(document.getElementById('dice-panel'));
+    makeDraggable(document.getElementById('walls-panel'));
+
+    // ── Walls panel shortcut ──────────────────────────────
+    document.addEventListener('keydown', (event) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (document.activeElement?.contentEditable === 'true') return;
+      if (event.key.toLowerCase() === 'w' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        document.getElementById('walls-toggle-btn')?.click();
+      }
+    });
   });
 
   // ─────────────────────────────────────────────────────────

@@ -258,3 +258,209 @@ def test_player_scene_data_excludes_hidden_exposes_vision(player_socket, dm_sock
     visible = next(t for t in scene_payload["tokens"] if t["tokenId"] == "visible-tok")
     assert visible.get("visionRadius") == 120.0
     assert visible.get("isMap") is False
+
+
+# ── Fog of War – Walls & Line of Sight smoke tests ─────────────────────────
+
+
+def _make_scene_with_walls(dm_socket, tmp_data, walls=None):
+    """Helper: create an empty scene and set it as active. Returns scene_id."""
+    app_module.scene_store.active_scene_id = None
+    dm_socket.emit("loadScene", {"sceneId": "no-scene"})
+    dm_socket.get_received()
+
+    scene_id = "wall-scene-1"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "WallScene",
+        "tokens": [],
+        "walls": walls or [],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+    return scene_id
+
+
+def test_wall_add_persists(dm_socket, tmp_data):
+    """DM emits addWall; wall persists in scene JSON and is broadcast back."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data)
+
+    wall = {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0}
+    dm_socket.emit("addWall", {"sceneId": scene_id, "wall": wall})
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert len(scene["walls"]) == 1
+    assert scene["walls"][0]["wallId"] == "w1"
+
+    received = dm_socket.get_received()
+    add_events = [e for e in received if e["name"] == "addWall"]
+    assert add_events, "Expected addWall broadcast to DM room"
+
+
+def test_player_scene_data_omits_walls_but_receives_walls_data(player_socket, dm_socket, tmp_data):
+    """Player loadScene sceneData must not contain walls; wallsData carries geometry."""
+    scene_id = "wall-scene-2"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "WallScene2",
+        "tokens": [],
+        "walls": [
+            {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+        ],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+
+    player_socket.emit("loadScene", {"sceneId": scene_id})
+    received = player_socket.get_received()
+
+    scene_data_events = [e for e in received if e["name"] == "sceneData"]
+    assert scene_data_events, "Expected sceneData for player"
+    payload = scene_data_events[-1]["args"][0]
+    assert "walls" not in payload, "Player sceneData must not expose walls"
+
+    walls_data_events = [e for e in received if e["name"] == "wallsData"]
+    assert walls_data_events, "Expected wallsData event for player"
+    walls_payload = walls_data_events[-1]["args"][0]
+    assert walls_payload["sceneId"] == scene_id
+    assert len(walls_payload["walls"]) == 1
+    assert walls_payload["walls"][0]["wallId"] == "w1"
+
+
+def test_dm_scene_data_includes_walls(dm_socket, tmp_data):
+    """DM loadScene sceneData includes the walls array."""
+    scene_id = "wall-scene-3"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "WallScene3",
+        "tokens": [],
+        "walls": [
+            {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+        ],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+
+    dm_socket.emit("loadScene", {"sceneId": scene_id})
+    received = dm_socket.get_received()
+    scene_data_events = [e for e in received if e["name"] == "sceneData"]
+    assert scene_data_events, "Expected sceneData for DM"
+    payload = scene_data_events[-1]["args"][0]
+    assert "walls" in payload, "DM sceneData must include walls"
+    assert payload["walls"][0]["wallId"] == "w1"
+
+
+def test_update_wall(dm_socket, tmp_data):
+    """DM emits updateWall; endpoints are mutated and broadcast."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data, walls=[
+        {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+    ])
+
+    dm_socket.emit("updateWall", {
+        "sceneId": scene_id,
+        "wallId": "w1",
+        "x1": 10.0, "y1": 20.0, "x2": 30.0, "y2": 40.0,
+    })
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    wall = scene["walls"][0]
+    assert wall["x1"] == 10.0
+    assert wall["y1"] == 20.0
+    assert wall["x2"] == 30.0
+    assert wall["y2"] == 40.0
+
+
+def test_remove_wall(dm_socket, tmp_data):
+    """DM emits removeWall; the wall is deleted."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data, walls=[
+        {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+        {"wallId": "w2", "x1": 0.0, "y1": 0.0, "x2": 0.0, "y2": 100.0},
+    ])
+
+    dm_socket.emit("removeWall", {"sceneId": scene_id, "wallId": "w1"})
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert len(scene["walls"]) == 1
+    assert scene["walls"][0]["wallId"] == "w2"
+
+
+def test_clear_walls(dm_socket, tmp_data):
+    """DM emits clearWalls; all walls are removed."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data, walls=[
+        {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+    ])
+
+    dm_socket.emit("clearWalls", {"sceneId": scene_id})
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["walls"] == []
+
+
+def test_wall_undo_redo(dm_socket, tmp_data):
+    """Add wall -> undo removes it -> redo restores it."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data)
+
+    wall = {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0}
+    dm_socket.emit("addWall", {"sceneId": scene_id, "wall": wall})
+    assert len(app_module.scene_store.load_scene(scene_id)["walls"]) == 1
+
+    dm_socket.emit("undo", {"sceneId": scene_id})
+    assert app_module.scene_store.load_scene(scene_id)["walls"] == []
+
+    dm_socket.emit("redo", {"sceneId": scene_id})
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert len(scene["walls"]) == 1
+    assert scene["walls"][0]["wallId"] == "w1"
+
+
+def test_wall_history_preserves_tokens(dm_socket, tmp_data):
+    """Undoing a wall change does not touch unrelated token state."""
+    scene_id = _make_scene_with_walls(dm_socket, tmp_data)
+    token_id = "tok-keep"
+    app_module.scene_store.add_token(scene_id, {
+        "tokenId": token_id,
+        "sceneId": scene_id,
+        "imageUrl": "/uploads/t.png",
+        "mediaType": "image",
+        "x": 10.0, "y": 10.0,
+        "width": 60.0, "height": 60.0,
+        "rotation": 0.0,
+        "zIndex": 1,
+        "movableByPlayers": False,
+        "hidden": False,
+    })
+
+    wall = {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0}
+    dm_socket.emit("addWall", {"sceneId": scene_id, "wall": wall})
+
+    dm_socket.emit("undo", {"sceneId": scene_id})
+    scene = app_module.scene_store.load_scene(scene_id)
+    assert scene["walls"] == []
+    assert any(t["tokenId"] == token_id for t in scene["tokens"])
+
+
+def test_duplicate_scene_deep_copies_walls(dm_client, tmp_data):
+    """Duplicate scene copies walls into the new scene."""
+    scene_id = "wall-scene-dup"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "Original",
+        "tokens": [],
+        "walls": [
+            {"wallId": "w1", "x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 0.0},
+        ],
+    }
+    app_module.scene_store.save_scene(app_module.scene_store.scenes[scene_id])
+
+    resp = dm_client.post(
+        "/duplicateScene",
+        data=json.dumps({"sceneId": scene_id, "sceneName": "Copy"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    new_id = json.loads(resp.data)["sceneId"]
+
+    new_scene = app_module.scene_store.load_scene(new_id)
+    assert len(new_scene["walls"]) == 1
+    assert new_scene["walls"][0]["wallId"] == "w1"
+    # Mutation independence
+    new_scene["walls"][0]["x1"] = 999.0
+    original = app_module.scene_store.load_scene(scene_id)
+    assert original["walls"][0]["x1"] == 0.0

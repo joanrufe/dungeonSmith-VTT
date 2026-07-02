@@ -115,6 +115,7 @@
     <button id="paint-toggle-btn" class="tray-btn" title="Paint Tools"><i class="fa-solid fa-paintbrush"></i><span>Paint</span></button>
     <button id="ae-toggle-btn"    class="tray-btn" title="Effects"><i class="fa-solid fa-bullseye"></i><span>Effects</span></button>
     <button id="notes-toggle-btn" class="tray-btn" title="Sticky Notes"><i class="fa-solid fa-note-sticky"></i><span>Notes</span></button>
+    <button id="walls-toggle-btn" class="tray-btn" title="Wall Tools (W)"><i class="fa-solid fa-vector-square"></i><span>Walls</span></button>
     <button id="dice-toggle-btn"  class="tray-btn" title="Dice Roller"><i class="fa-solid fa-dice-d20"></i><span>Dice</span></button>
     <button id="music-toggle-btn" class="tray-btn" title="Music Panel"><i class="fa-solid fa-music"></i><span>Music</span></button>
   </div>
@@ -248,6 +249,22 @@
     </div>
   </div>
 
+  <!-- ═══ WALLS PANEL (floating pop-out) ═══ -->
+  <div id="walls-panel" class="draggable-panel panel-hidden">
+    <div class="panel-drag-handle"><span><i class="fa-solid fa-vector-square"></i> Walls</span><span class="drag-hint">☰</span></div>
+    <div class="walls-tool-row">
+      <button id="walls-draw-btn" class="walls-mode-btn" title="Draw wall (D)"><i class="fa-solid fa-pen"></i> Draw</button>
+      <button id="walls-erase-btn" class="walls-mode-btn" title="Erase wall (E)"><i class="fa-solid fa-eraser"></i> Erase</button>
+    </div>
+    <div class="walls-tool-row">
+      <label class="walls-snap-label" title="Snap wall endpoints to the grid">
+        <input type="checkbox" id="walls-snap-toggle"> Snap to grid
+      </label>
+    </div>
+    <button id="walls-clear-btn" class="walls-clear-btn"><i class="fa-solid fa-trash-can"></i> Clear All</button>
+    <p class="walls-hint">Drag to draw. Click endpoint to move. Delete removes selected wall.</p>
+  </div>
+
   <!-- ═══ DICE PANEL (floating pop-out) ═══ -->
   <div id="dice-panel" class="draggable-panel panel-hidden">
     <div class="panel-drag-handle">
@@ -374,6 +391,7 @@
   <script src="/js/paintMode.js"></script>
   <script src="/js/stickyNotes.js"></script>
   <script src="/js/areaEffects.js"></script>
+  <script src="/js/wallsTool.js"></script>
   <script type="module" src="/js/diceRoller.js"></script>
 </body>
 

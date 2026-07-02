@@ -530,6 +530,85 @@
   color: #000 !important;
 }
 
+/* ── Walls Panel ────────────────────────────────────────── */
+#walls-panel { top: 50px; right: 110px; width: 210px; }
+
+.walls-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.walls-mode-btn,
+.walls-clear-btn {
+  flex: 1;
+  background: var(--ss-control) !important;
+  border: 1px solid var(--ss-border) !important;
+  color: #fff !important;
+  padding: 6px 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.walls-mode-btn:hover,
+.walls-clear-btn:hover {
+  background: var(--ss-control-hover) !important;
+  border-color: var(--ss-orange) !important;
+}
+
+.walls-mode-btn.active-tool-btn {
+  background: var(--ss-red) !important;
+  border-color: var(--ss-red) !important;
+}
+
+.walls-snap-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #ccc;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.walls-snap-label input[type="checkbox"] {
+  accent-color: var(--ss-orange);
+}
+
+.walls-hint {
+  margin: 8px 0 0;
+  padding: 6px;
+  background: rgba(255,255,255,0.045);
+  color: var(--ss-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.wall-overlay-line {
+  stroke: rgba(255, 122, 24, 0.55);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.wall-preview-line {
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 2;
+  stroke-dasharray: 5, 5;
+  stroke-linecap: round;
+}
+
+.wall-endpoint-handle {
+  fill: rgba(255, 122, 24, 0.85);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.wall-selected-endpoint {
+  fill: #00ffff;
+  stroke: #fff;
+  stroke-width: 2;
+}
+
 /* Music panel */
 #music-drop-area {
   border: 2px dashed #555;

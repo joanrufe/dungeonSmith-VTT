@@ -54,8 +54,17 @@ class _SceneDictRequired(TypedDict):
     tokens: List[TokenDict]
 
 
+class WallDict(TypedDict):
+    wallId: str
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+
 class SceneDict(_SceneDictRequired, total=False):
     order: int
+    walls: List[WallDict]
 
 
 class _StickyNoteDictRequired(TypedDict):
@@ -201,9 +210,12 @@ class SceneStore:
 
     def load_scene(self, scene_id: SceneId) -> SceneDict:
         if scene_id in self.scenes:
-            return self.scenes[scene_id]
+            scene = self.scenes[scene_id]
+            scene.setdefault("walls", [])
+            return scene
         path = self.path_for(scene_id)
         scene = json.loads(path.read_text(encoding="utf-8"))
+        scene.setdefault("walls", [])
         self.scenes[scene_id] = scene
         return scene
 
@@ -301,6 +313,46 @@ class SceneStore:
                 return removed
         return None
 
+    def add_wall(self, scene_id: SceneId, wall: WallDict) -> None:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        scene.setdefault("walls", []).append(wall)
+        self.save_scene(scene)
+
+    def update_wall(
+        self,
+        scene_id: SceneId,
+        wall_id: str,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+    ) -> bool:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        for wall in scene.get("walls", []):
+            if wall.get("wallId") == wall_id:
+                wall["x1"] = x1
+                wall["y1"] = y1
+                wall["x2"] = x2
+                wall["y2"] = y2
+                self.save_scene(scene)
+                return True
+        return False
+
+    def remove_wall(self, scene_id: SceneId, wall_id: str) -> Optional[WallDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        walls = scene.setdefault("walls", [])
+        for index, wall in enumerate(walls):
+            if wall.get("wallId") == wall_id:
+                removed = walls.pop(index)
+                self.save_scene(scene)
+                return removed
+        return None
+
+    def clear_walls(self, scene_id: SceneId) -> None:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        scene["walls"] = []
+        self.save_scene(scene)
+
 
 class SceneHistory:
     """Server-side undo/redo of token-property mutations, per scene.
@@ -347,7 +399,8 @@ class SceneHistory:
                 entry["redo"].clear()
             scene = self._store.scenes.get(scene_id) or self._store.load_scene(scene_id)
             entry["pending"] = {
-                "before_snapshot": json.loads(json.dumps(scene.get("tokens", []))),
+                "before_tokens": json.loads(json.dumps(scene.get("tokens", []))),
+                "before_walls": json.loads(json.dumps(scene.get("walls", []))),
                 "last_touch_ms": now,
                 "deleted_image_urls": [],
             }
@@ -369,8 +422,9 @@ class SceneHistory:
             if not entry["undo"]:
                 return None
             scene = self._store.scenes.get(scene_id) or self._store.load_scene(scene_id)
-            current = json.loads(json.dumps(scene.get("tokens", [])))
-            entry["redo"].append({"tokens": current, "deleted_image_urls": []})
+            current_tokens = json.loads(json.dumps(scene.get("tokens", [])))
+            current_walls = json.loads(json.dumps(scene.get("walls", [])))
+            entry["redo"].append({"tokens": current_tokens, "walls": current_walls, "deleted_image_urls": []})
             return entry["undo"].pop()
 
     def redo(self, scene_id: SceneId) -> Optional[Dict[str, Any]]:
@@ -381,8 +435,9 @@ class SceneHistory:
             if not entry["redo"]:
                 return None
             scene = self._store.scenes.get(scene_id) or self._store.load_scene(scene_id)
-            current = json.loads(json.dumps(scene.get("tokens", [])))
-            entry["undo"].append({"tokens": current, "deleted_image_urls": []})
+            current_tokens = json.loads(json.dumps(scene.get("tokens", [])))
+            current_walls = json.loads(json.dumps(scene.get("walls", [])))
+            entry["undo"].append({"tokens": current_tokens, "walls": current_walls, "deleted_image_urls": []})
             if len(entry["undo"]) > self.MAX_DEPTH:
                 self._evict_oldest_locked(scene_id)
             return entry["redo"].pop()
@@ -405,7 +460,8 @@ class SceneHistory:
                 self._store.delete_upload_if_unused(url)
         entry["redo"].clear()
         entry["undo"].append({
-            "tokens": pending["before_snapshot"],
+            "tokens": pending["before_tokens"],
+            "walls": pending["before_walls"],
             "deleted_image_urls": pending["deleted_image_urls"],
         })
         if len(entry["undo"]) > self.MAX_DEPTH:
@@ -955,7 +1011,9 @@ def socket_load_scene(data: Optional[Dict[str, Any]]) -> None:
         if socket_roles.get(request.sid) == "player":
             filtered = dict(scene)
             filtered["tokens"] = [token for token in scene.get("tokens", []) if not token.get("hidden")]
+            filtered.pop("walls", None)
             emit("sceneData", filtered)
+            emit("wallsData", {"sceneId": scene["sceneId"], "walls": scene.get("walls", [])})
         else:
             emit("sceneData", scene)
     except Exception:
@@ -1028,6 +1086,80 @@ def socket_remove_token(data: Optional[Dict[str, Any]]) -> None:
     if removed is not None:
         history.record_pending_deletion(scene_id, removed.get("imageUrl"))
         socketio.emit("removeToken", {"sceneId": scene_id, "tokenId": token_id})
+    can_undo, can_redo = history.state(scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
+
+
+@socketio.on("addWall")
+def socket_add_wall(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    wall = (data or {}).get("wall")
+    if not scene_id or not wall or not wall.get("wallId"):
+        return
+    history.before_mutation(scene_id)
+    scene_store.add_wall(scene_id, wall)
+    socketio.emit("addWall", {"sceneId": scene_id, "wall": wall}, to="dm")
+    socketio.emit("wallsData", {"sceneId": scene_id, "walls": scene_store.load_scene(scene_id).get("walls", [])}, to="player")
+    can_undo, can_redo = history.state(scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
+
+
+@socketio.on("updateWall")
+def socket_update_wall(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    wall_id = (data or {}).get("wallId")
+    if not scene_id or not wall_id:
+        return
+    history.before_mutation(scene_id)
+    updated = scene_store.update_wall(
+        scene_id,
+        wall_id,
+        float((data or {}).get("x1", 0)),
+        float((data or {}).get("y1", 0)),
+        float((data or {}).get("x2", 0)),
+        float((data or {}).get("y2", 0)),
+    )
+    if updated:
+        scene = scene_store.load_scene(scene_id)
+        updated_wall = next((w for w in scene.get("walls", []) if w.get("wallId") == wall_id), {})
+        socketio.emit("updateWall", {"sceneId": scene_id, "wallId": wall_id, **updated_wall}, to="dm")
+        socketio.emit("wallsData", {"sceneId": scene_id, "walls": scene.get("walls", [])}, to="player")
+    can_undo, can_redo = history.state(scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
+
+
+@socketio.on("removeWall")
+def socket_remove_wall(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    wall_id = (data or {}).get("wallId")
+    if not scene_id or not wall_id:
+        return
+    history.before_mutation(scene_id)
+    removed = scene_store.remove_wall(scene_id, wall_id)
+    if removed is not None:
+        socketio.emit("removeWall", {"sceneId": scene_id, "wallId": wall_id}, to="dm")
+        socketio.emit("wallsData", {"sceneId": scene_id, "walls": scene_store.load_scene(scene_id).get("walls", [])}, to="player")
+    can_undo, can_redo = history.state(scene_id)
+    socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
+
+
+@socketio.on("clearWalls")
+def socket_clear_walls(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    if not scene_id:
+        return
+    history.before_mutation(scene_id)
+    scene_store.clear_walls(scene_id)
+    socketio.emit("clearWalls", {"sceneId": scene_id}, to="dm")
+    socketio.emit("wallsData", {"sceneId": scene_id, "walls": []}, to="player")
     can_undo, can_redo = history.state(scene_id)
     socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
@@ -1148,11 +1280,14 @@ def socket_add_token_from_library(data: Optional[Dict[str, Any]]) -> None:
 def _apply_snapshot_and_broadcast(scene_id: str, snapshot: Dict[str, Any]) -> None:
     scene = scene_store.scenes.get(scene_id) or scene_store.load_scene(scene_id)
     scene["tokens"] = snapshot["tokens"]
+    scene["walls"] = snapshot.get("walls", [])
     scene_store.save_scene(scene)
     socketio.emit("sceneData", scene, to="dm")
     filtered = dict(scene)
     filtered["tokens"] = [t for t in scene.get("tokens", []) if not t.get("hidden")]
+    filtered.pop("walls", None)
     socketio.emit("sceneData", filtered, to="player")
+    socketio.emit("wallsData", {"sceneId": scene_id, "walls": scene.get("walls", [])}, to="player")
     can_undo, can_redo = history.state(scene_id)
     socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
