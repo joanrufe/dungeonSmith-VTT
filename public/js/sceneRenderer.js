@@ -588,6 +588,11 @@ export class SceneRenderer {
   _computeVisibilityPolygon(cx, cy, sr, walls) {
     const EPS_ANG = 0.0002;
     const FALLBACK_RAYS = 360;
+    const TWO_PI = Math.PI * 2;
+    const normalizeAngle = (a) => {
+      const m = a % TWO_PI;
+      return m < 0 ? m + TWO_PI : m;
+    };
     const angles = new Set();
 
     for (const wall of walls) {
@@ -596,9 +601,9 @@ export class SceneRenderer {
         const sx = (p.x + this.offsetX) * this.scale;
         const sy = (p.y + this.offsetY) * this.scale;
         const a = Math.atan2(sy - cy, sx - cx);
-        angles.add(a - EPS_ANG);
-        angles.add(a);
-        angles.add(a + EPS_ANG);
+        angles.add(normalizeAngle(a - EPS_ANG));
+        angles.add(normalizeAngle(a));
+        angles.add(normalizeAngle(a + EPS_ANG));
       }
     }
 
