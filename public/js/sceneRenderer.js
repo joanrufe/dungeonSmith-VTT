@@ -462,31 +462,25 @@ export class SceneRenderer {
     ctx.fillStyle = fogFill;
     ctx.fillRect(0, 0, w, h);
 
-    // Step 2: cut vision holes (soft radial gradient per source)
-    ctx.globalCompositeOperation = 'destination-out';
-    for (const token of visionSources) {
-      if (token.isMap)        continue;
-      if (token.isPaintTile)  continue;
-      if (token.isAreaEffect) continue;
-      const radius = token.visionRadius;
-      if (!radius || radius <= 0) continue;
-
-      const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
-      const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
-      const sr = radius * this.scale;
-
-      this._drawRadialVisionHole(ctx, cx, cy, sr);
-    }
-
-    // Step 3: wall occlusion + shadow projection
+    // Step 2: wall-aware vision carving
     //
     // For each vision source that overlaps a wall, compute a visibility
     // polygon by raycasting toward wall vertices (with dense fallback
     // rays so polygon edges follow the circle smoothly).  Paint that
-    // polygon with a clipped radial gradient (Step 2 already handled the
-    // no-walls case).  Then paint each wall polygon as a fully-opaque mask
-    // on top to re-occlude light inside the wall.
+    // polygon with a clipped radial gradient. For sources that do not overlap
+    // any wall bounds, fall back to plain radial carving. Then paint each wall
+    // polygon as a fully-opaque mask on top to re-occlude light inside the
+    // wall.
     if (walls.length === 0) {
+      ctx.globalCompositeOperation = 'destination-out';
+      for (const token of visionSources) {
+        const radius = token.visionRadius;
+        if (!radius || radius <= 0) continue;
+        const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
+        const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
+        const sr = radius * this.scale;
+        this._drawRadialVisionHole(ctx, cx, cy, sr);
+      }
       ctx.globalCompositeOperation = 'source-over';
       return;
     }
@@ -547,11 +541,8 @@ export class SceneRenderer {
       ctx.restore();
     }
 
-    // Now paint every wall polygon as fully opaque, AND paint the
-    // "shadow sector" behind each wall edge: the area bounded by the
-    // edge and the two rays from the source through its endpoints
-    // extended to the vision circle.  This makes the shadow behind the
-    // wall completely opaque — no light leaks through.
+    // Paint every wall polygon as fully opaque so wall interiors are never
+    // visible through carved vision areas.
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = 'rgba(0,0,0,1)';
     for (const wall of walls) {
@@ -567,40 +558,6 @@ export class SceneRenderer {
       }
       ctx.closePath();
       ctx.fill();
-
-      // Shadow sectors behind each edge
-      for (const token of visionSources) {
-        const radius = token.visionRadius;
-        if (!radius || radius <= 0) continue;
-        const cx = (token.x + token.width  / 2 + this.offsetX) * this.scale;
-        const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
-        const sr = radius * this.scale;
-
-        for (let i = 0; i < n; i++) {
-          const a = pts[i];
-          const b = pts[(i + 1) % n];
-          const ax = (a.x + this.offsetX) * this.scale;
-          const ay = (a.y + this.offsetY) * this.scale;
-          const bx = (b.x + this.offsetX) * this.scale;
-          const by = (b.y + this.offsetY) * this.scale;
-
-          const angleA = Math.atan2(ay - cy, ax - cx);
-          const angleB = Math.atan2(by - cy, bx - cx);
-
-          ctx.beginPath();
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(bx, by);
-          // Ray from B outward to the circle edge
-          ctx.lineTo(cx + Math.cos(angleB) * sr, cy + Math.sin(angleB) * sr);
-          // Arc along the circle from angleB to angleA (shortest path =
-          // the side of the circle that the wall edge is on)
-          const diff = ((angleA - angleB) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-          const ccw = diff > Math.PI;
-          ctx.arc(cx, cy, sr, angleB, angleA, ccw);
-          ctx.closePath(); // ray back to ax, ay
-          ctx.fill();
-        }
-      }
     }
 
     // Restore default composite for future draws
