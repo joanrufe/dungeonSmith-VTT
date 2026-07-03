@@ -661,3 +661,102 @@ def test_set_fog_opacity_invalid_value_ignored(dm_socket, tmp_data):
     dm_socket.emit("setFogOpacity", {"sceneId": scene_id})  # missing key
     assert app_module.scene_store.load_scene(scene_id)["fogOpacity"] == 0.3
 
+
+# ── Token rotation permission smoke tests ─────────────────────────────────
+
+
+def _seed_token(scene_id: str, token_id: str, **overrides) -> None:
+    """Helper: add a single token to an existing scene."""
+    token = {
+        "tokenId": token_id,
+        "sceneId": scene_id,
+        "imageUrl": "/uploads/t.png",
+        "mediaType": "image",
+        "x": 100.0,
+        "y": 100.0,
+        "width": 60.0,
+        "height": 60.0,
+        "rotation": 0.0,
+        "zIndex": 1,
+        "movableByPlayers": False,
+        "hidden": False,
+    }
+    token.update(overrides)
+    app_module.scene_store.add_token(scene_id, token)
+
+
+def test_dm_update_token_rotation_persists(dm_socket, tmp_data):
+    """DM can rotate a token via updateToken; rotation persists in scene JSON."""
+    scene_id = "rotation-dm-scene"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "RotationDM",
+        "tokens": [],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+    _seed_token(scene_id, "rot-tok-1")
+
+    dm_socket.emit("updateToken", {
+        "sceneId": scene_id,
+        "tokenId": "rot-tok-1",
+        "properties": {"rotation": 45.0},
+    })
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    token = next(t for t in scene["tokens"] if t["tokenId"] == "rot-tok-1")
+    assert token["rotation"] == 45.0
+
+    # The broadcast also reaches the DM socket
+    dm_socket.emit("loadScene", {"sceneId": scene_id})
+    received = dm_socket.get_received()
+    scene_data_events = [e for e in received if e["name"] == "sceneData"]
+    assert scene_data_events
+    tok = next(t for t in scene_data_events[-1]["args"][0]["tokens"] if t["tokenId"] == "rot-tok-1")
+    assert tok["rotation"] == 45.0
+
+
+def test_player_update_token_rotation_rejected(player_socket, tmp_data):
+    """Player updateToken containing rotation is rejected under existing permissions."""
+    scene_id = "rotation-player-scene"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "RotationPlayer",
+        "tokens": [],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+    _seed_token(scene_id, "rot-tok-2", movableByPlayers=True)
+
+    player_socket.emit("updateToken", {
+        "sceneId": scene_id,
+        "tokenId": "rot-tok-2",
+        "properties": {"rotation": 90.0},
+    })
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    token = next(t for t in scene["tokens"] if t["tokenId"] == "rot-tok-2")
+    assert token["rotation"] == 0.0, "Player must not be able to update rotation"
+
+
+def test_player_update_token_position_still_allowed(player_socket, tmp_data):
+    """Player can still move a movable token using only x and y."""
+    scene_id = "rotation-player-move-scene"
+    app_module.scene_store.scenes[scene_id] = {
+        "sceneId": scene_id,
+        "sceneName": "RotationPlayerMove",
+        "tokens": [],
+    }
+    app_module.scene_store.active_scene_id = scene_id
+    _seed_token(scene_id, "rot-tok-3", movableByPlayers=True)
+
+    player_socket.emit("updateToken", {
+        "sceneId": scene_id,
+        "tokenId": "rot-tok-3",
+        "properties": {"x": 150.0, "y": 200.0},
+    })
+
+    scene = app_module.scene_store.load_scene(scene_id)
+    token = next(t for t in scene["tokens"] if t["tokenId"] == "rot-tok-3")
+    assert token["x"] == 150.0
+    assert token["y"] == 200.0
+    assert token["rotation"] == 0.0
+
