@@ -1,6 +1,8 @@
 // public/js/rotationOverlay.js
 // DM-only visual center-of-rotation indicator and drag-rotation handle.
 
+import { computeRotationOverlayPositions, snapRotation } from './rotationOverlayMath.js';
+
 /** @typedef {import('./sceneManager.js').TokenDict} TokenDict */
 
 export class RotationOverlay {
@@ -96,22 +98,7 @@ export class RotationOverlay {
    */
   _computePositions(token) {
     const r = this._r();
-    const cx = (token.x + token.width / 2 + r.offsetX) * r.scale;
-    const cy = (token.y + token.height / 2 + r.offsetY) * r.scale;
-    const rotation = token.rotation || 0;
-    const rad = (rotation * Math.PI) / 180;
-
-    // Unit vector pointing to the token's rotated top edge.
-    const dirX = Math.sin(rad);
-    const dirY = -Math.cos(rad);
-
-    const halfH = (token.height / 2) * r.scale;
-    const topX = cx + dirX * halfH;
-    const topY = cy + dirY * halfH;
-    const handleX = topX + dirX * this.HANDLE_OFFSET;
-    const handleY = topY + dirY * this.HANDLE_OFFSET;
-
-    return { cx, cy, rotation, topX, topY, handleX, handleY };
+    return computeRotationOverlayPositions(token, r.scale, r.offsetX, r.offsetY, this.HANDLE_OFFSET);
   }
 
   /**
@@ -336,12 +323,7 @@ export class RotationOverlay {
       // Treat as a selection click.
       this.sceneManager.selectSingleTokenId(drag.tokenId);
     } else {
-      let rotation = drag.token.rotation;
-      if (event.shiftKey) {
-        rotation = Math.round(rotation);
-      } else {
-        rotation = Math.round(rotation / 15) * 15;
-      }
+      const rotation = snapRotation(drag.token.rotation, event.shiftKey);
       drag.token.rotation = rotation;
       this.sceneRenderer.updateTokenElement(drag.token);
 
