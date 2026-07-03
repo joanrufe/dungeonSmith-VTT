@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI agents (OpenCode/otherwise) working in SceneSmith-VTT, a fork of
+Guidance for AI agents (OpenCode/otherwise) working in DungeonSmith-VTT, a fork of
 SamsterJam's MiniVTT. D&D virtual tabletop for trusted local/LAN games.
 
 ## The one thing you must know first
@@ -33,7 +33,7 @@ python app.py
   survive restart).
 - Windows launchers (developer-facing, not needed on Linux):
   `Run_DND_VTT.bat` (everyday), `runEmbedded.bat` (no-Python, embeddable 3.12.10),
-  `runVirtualEnv.bat` (**build**, not run — produces `dist/SceneSmithVTT/`). All
+  `runVirtualEnv.bat` (**build**, not run — produces `dist/DungeonSmithVTT/`). All
   three just launch `app.py` after setting up `.venv`.
 
 ## Stack / env

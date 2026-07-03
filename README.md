@@ -1,11 +1,9 @@
-# SceneSmith VTT
+# DungeonSmith VTT
 
-A heavily expanded fork of [MiniVTT](https://github.com/SamsterJam/MiniVTT) for running lightweight tabletop RPG sessions with a faster DM workflow, richer scene tools, and real-time player sync.
+A fork of [SceneSmith-VTT](https://github.com/Echoshard/SceneSmith-VTT), itself an expanded fork of [MiniVTT](https://github.com/SamsterJam/MiniVTT). DungeonSmith VTT keeps the original "everything is a token" simplicity while adding a larger DM toolset: media organization, paint tools, initiative announcements, 3D dice, ruler mode, player-facing sync, music controls, sticky notes, and quality-of-life updates for running sessions quickly.
 
-SceneSmith VTT keeps the original "everything is a token" simplicity while adding a larger DM toolset: media organization, paint tools, initiative announcements, 3D dice, ruler mode, player-facing sync, music controls, sticky notes, and quality-of-life updates for running sessions quickly.
-
-Original project:  
-https://github.com/SamsterJam/MiniVTT
+Original upstream project:  
+https://github.com/Echoshard/SceneSmith-VTT
 
 ---
 
@@ -29,13 +27,15 @@ These are the core ideas and baseline capabilities inherited from MiniVTT:
 
 **Music support** - Upload and play music for connected clients.
 
-### Added In SceneSmith VTT
+### Added In DungeonSmith VTT
 
 These are the major additions and expansions in this fork:
 
+**Token visibility toggle** - The DM can hide tokens from players with a simple checkbox in the token status popup. Hidden tokens are filtered out of player views and shown ghosted to the DM, making it easy to keep surprises off the player screen.
+
 **Expanded DM toolbar and floating panels** - DM tools live in draggable panels with a right-side tray for Initiative, Paint, Effects, Dice, Music, and Notes.
 
-**DM Admin* - Organize reusable media in folders from `/dmadmin`. Upload images, videos, PDFs, and text documents. Shift-click downloads files, and double-clicking images/videos adds them to the active scene. Passwords can also be viewed.
+**DM Admin** - Organize reusable media in folders from `/dmadmin`. Upload images, videos, PDFs, and text documents. Shift-click downloads files, and double-clicking images/videos adds them to the active scene. Passwords can also be viewed.
 
 **Password management tab** - Change DM and player passwords from the Media Library password tab or by editing `data/private/secrets.txt`.
 
@@ -49,23 +49,23 @@ These are the major additions and expansions in this fork:
 
 **Initiative tracker** - Track turn order, edit names/values inline, advance rounds, and announce active turns with readable center-screen callouts visible to all players.
 
-**3D dice roller** - Roll common dice or expressions `2d6+12` Synced across the network. Slient rolls only happen for you.
+**3D dice roller** - Roll common dice or expressions like `2d6+12`. Synced across the network. Silent rolls only happen for you.
 
 **Snap View** - DM can push their current camera position and zoom to connected players.
 
 **Scene ping** - Double-click the scene to place a temporary blue ping indicator visible to all connected clients. Works on the background and on tokens.
 
-**Sticky notes** - Private draggable notes pinned to the scene in world space. Persistent across sessions for DM's not players.
+**Sticky notes** - Private draggable notes pinned to the scene in world space. Persistent across sessions for the DM, not players.
 
 **Player-side controls** - Player help modal, collapsible initiative sidebar, ruler, dice panel, sticky notes panel, and independent pan/zoom behavior.
 
-**Scene dropdown and pinned scenes** - Scenes are accessed through a dropdown menu rather than a horizontal scrollbar. Pin up to 5 frequently used scenes to the toolbar for one-click access and are saved. 
+**Scene dropdown and pinned scenes** - Scenes are accessed through a dropdown menu rather than a horizontal scrollbar. Pin up to 5 frequently used scenes to the toolbar for one-click access; pins persist.
 
-**Effects tool** - Spawn transparent area-effect overlays directly on the canvas as standard tokens and can be animated.
+**Effects tool** - Spawn transparent area-effect overlays directly on the canvas as standard tokens and animate them.
 
 **Token lock** - Press `L` to lock a selected token. Locked tokens show a red outline, cannot be moved or resized by anyone, but remain selectable and deletable.
 
-**Player Files** - A player-accessible media library at `/player-files`. Players can browse and double-click any file to download it. A **DM Mode** toggle (requires DM password) unlocks upload, file deletion.
+**Player Files** - A player-accessible media library at `/player-files`. Players can browse and double-click any file to download it. A **DM Mode** toggle (requires DM password) unlocks upload, file deletion, and folder management.
 
 ---
 
@@ -79,17 +79,19 @@ On first run it downloads a self-contained Python runtime (~30 MB), installs dep
 
 > Internet access is required on the first run only.
 
-### virual Environment (Python already installed)
+### Virtual Environment (Python already installed)
 
 **Requirements:** Python 3.8 or newer
 
-On Windows Double-click `runVirtualEnv.bat`.
-
-Manual Install:
+On Windows, double-click `runVirtualEnv.bat` to create a slim runtime build, or run manually:
 
 ```sh
 python -m venv .venv
+# Windows:
 .venv\Scripts\activate
+# Linux / macOS:
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
@@ -99,7 +101,7 @@ Then start the server:
 python app.py
 ```
 
-The server starts on port `3000` by default.
+The server starts on port `3000` by default. Override with the `VTT_PORT` environment variable.
 
 Default URLs:
 
@@ -108,12 +110,12 @@ Default URLs:
 - DM view: `http://localhost:3000/dm`
 - DM Admin/Files: `http://localhost:3000/dmadmin`
 
-Default Passwords: 
+Default passwords:
 
-DM password: `DMCODE`
-Player password: `PLAY`
+- DM password: `DMCODE`
+- Player password: `PLAY`
 
-Passwords are changed in DM Admin area
+Passwords can be changed in the DM Admin area or by editing `data/private/secrets.txt`.
 
 ---
 
@@ -144,7 +146,7 @@ Players open `/` and see the active scene, visible tokens, initiative callouts, 
 
 ### DM Admin
 
-Open `/dmadmin` to upload and organize files and change passwords
+Open `/dmadmin` to upload and organize files and change passwords.
 
 - Double-click an image or video to add it to the active scene.
 - Shift-click any file to download it.
@@ -210,10 +212,14 @@ For both:
 │   ├── index.html
 │   ├── files.html
 │   ├── player-files.html
+│   ├── DungeonSmith.png
 │   ├── media/
 │   ├── music/
 │   └── uploads/
 ├── Run_DND_VTT.bat
+├── runEmbedded.bat
+├── runVirtualEnv.bat
+├── run_dev.sh
 └── data/private/secrets.txt
 ```
 
@@ -242,7 +248,7 @@ Runtime/user data folders are ignored by git:
 
 ## Security Disclaimer
 
-SceneSmith VTT is intended for trusted local games and private networks.
+DungeonSmith VTT is intended for trusted local games and private networks.
 
 It has not been security audited. File uploads, password handling, and WebSocket access are designed for convenience, not hardened public hosting. If you expose it to the internet, put it behind proper authentication, HTTPS/WSS, and a trusted reverse proxy.
 
@@ -252,8 +258,9 @@ Use at your own risk.
 
 ## License
 
-SceneSmith VTT is a fork of MiniVTT by SamsterJam:
+DungeonSmith VTT is a fork of SceneSmith-VTT by [Echoshard](https://github.com/Echoshard), which is itself a fork of MiniVTT by [SamsterJam](https://github.com/SamsterJam).
 
-https://github.com/SamsterJam/MiniVTT
+- SceneSmith-VTT: https://github.com/Echoshard/SceneSmith-VTT
+- MiniVTT: https://github.com/SamsterJam/MiniVTT
 
-This project remains licensed under GPL-3.0.
+This project preserves the original GPL-3.0 license.

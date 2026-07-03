@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-title SceneSmith VTT
+title DungeonSmith VTT
 
 set "SCRIPT_DIR=%~dp0"
 pushd "%SCRIPT_DIR%" >nul 2>&1
@@ -52,7 +52,7 @@ goto parse_args
 
 echo.
 echo ==========================================
-echo   SceneSmith VTT Launcher
+echo   DungeonSmith VTT Launcher
 echo   Running: %APP_NAME%
 echo ==========================================
 echo.
@@ -114,7 +114,7 @@ for /f "delims=" %%I in ('powershell -NoProfile -Command "(Get-NetIPAddress -Add
 echo [OK] Using embedded Python: %ACTIVE_PY_EXE%
 echo.
 echo ==========================================
-echo   SceneSmith VTT is starting...
+echo   DungeonSmith VTT is starting...
 echo ==========================================
 echo.
 echo   -- Localhost --
