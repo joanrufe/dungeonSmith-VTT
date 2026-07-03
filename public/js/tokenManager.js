@@ -82,6 +82,11 @@ export class TokenManager {
     target.style.width  = `${token.width  * this.sceneRenderer.scale}px`;
     target.style.height = `${token.height * this.sceneRenderer.scale}px`;
 
+    // Keep rotation handle aligned while the token is being resized.
+    if (window.VTT_DM?.sceneManager?.rotationOverlay) {
+      window.VTT_DM.sceneManager.rotationOverlay.sync(window.VTT_DM.sceneManager.selectedTokenIds);
+    }
+
     this.socket.emit('updateToken', {
       sceneId:    token.sceneId,
       tokenId:    token.tokenId,

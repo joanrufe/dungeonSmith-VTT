@@ -13,6 +13,8 @@ export class SceneRenderer {
     this.offsetX = 0;
     this.offsetY = 0;
     this.fogOpacity = 1.0;
+    /** @type {(() => void) | null} Optional callback invoked after every updateAllTokenElements(). */
+    this.onUpdateAll = null;
   }
 
   /**
@@ -306,6 +308,10 @@ export class SceneRenderer {
       this.drawFog();
     } else {
       this.renderWallsOverlay();
+    }
+
+    if (this.onUpdateAll) {
+      this.onUpdateAll();
     }
   }
 

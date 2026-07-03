@@ -5,6 +5,7 @@ import { MusicManager } from './musicManager.js';
 import { SceneRenderer } from './sceneRenderer.js';
 import { PanZoomHandler } from './panZoomHandler.js';
 import { TokenManager } from './tokenManager.js';
+import { RotationOverlay } from './rotationOverlay.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const socket = io({ query: { role: 'dm' } });
@@ -12,7 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const sceneRenderer = new SceneRenderer(sceneContainer, true);
   const panZoomHandler = new PanZoomHandler(sceneContainer, sceneRenderer);
   const tokenManager = new TokenManager(sceneRenderer, socket, true); // true indicates DM
-  const sceneManager = new SceneManager(socket, sceneRenderer, tokenManager, sceneContainer);
+  const rotationOverlay = new RotationOverlay(sceneContainer, sceneRenderer, null); // sceneManager assigned below
+  const sceneManager = new SceneManager(socket, sceneRenderer, tokenManager, sceneContainer, rotationOverlay);
+  rotationOverlay.sceneManager = sceneManager;
+  rotationOverlay.socket = socket;
 
   // Expose to non-module scripts (paint mode, initiative tracker)
   window.VTT_DM = { socket, sceneManager };

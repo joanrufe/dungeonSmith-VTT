@@ -134,6 +134,11 @@
           });
         });
 
+        // Keep rotation overlays aligned with a token that is being dragged.
+        if (window.VTT_DM?.sceneManager?.rotationOverlay) {
+          window.VTT_DM.sceneManager.rotationOverlay.sync(window.VTT_DM.sceneManager.selectedTokenIds);
+        }
+
         // Players see fog; keep it in sync while dragging (server does not echo back to self)
         if (!ctx.isDM) {
           ctx.renderer.drawFog();

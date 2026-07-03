@@ -62,11 +62,12 @@
  */
 
 export class SceneManager {
-  constructor(socket, sceneRenderer, tokenManager, sceneContainer) {
+  constructor(socket, sceneRenderer, tokenManager, sceneContainer, rotationOverlay = null) {
     this.socket = socket;
     this.sceneRenderer = sceneRenderer;
     this.tokenManager = tokenManager;
     this.sceneContainer = sceneContainer;
+    this.rotationOverlay = rotationOverlay;
     this.isDM = true;
     this.currentScene = null;
     this.selectedTokenId = null;
@@ -74,6 +75,12 @@ export class SceneManager {
     this.allScenes = [];
     this.pinnedSceneIds = this._loadPinnedScenes();
     this._dropdownSetup = false;
+
+    if (this.rotationOverlay) {
+      this.sceneRenderer.onUpdateAll = () => {
+        this.rotationOverlay.sync(this.selectedTokenIds);
+      };
+    }
 
     this.init();
   }
@@ -607,6 +614,32 @@ export class SceneManager {
   clearSelection() {
     this.selectedTokenIds.clear();
     this.selectedTokenId = null;
+    if (this.rotationOverlay) this.rotationOverlay.clear();
+    this.refreshSelectionStyles();
+  }
+
+  /**
+   * Select exactly one token and clear any multi-selection.
+   * @param {string} tokenId
+   */
+  selectSingleTokenId(tokenId) {
+    this.selectedTokenIds.clear();
+    this.selectedTokenIds.add(tokenId);
+    this.selectedTokenId = tokenId;
+    this.refreshSelectionStyles();
+  }
+
+  /**
+   * Toggle a token's membership in the current selection, keeping other selections.
+   * @param {string} tokenId
+   */
+  toggleSelectedTokenId(tokenId) {
+    if (this.selectedTokenIds.has(tokenId)) {
+      this.selectedTokenIds.delete(tokenId);
+    } else {
+      this.selectedTokenIds.add(tokenId);
+    }
+    this.selectedTokenId = this.selectedTokenIds.size ? Array.from(this.selectedTokenIds).at(-1) : null;
     this.refreshSelectionStyles();
   }
 
@@ -621,6 +654,10 @@ export class SceneManager {
         element.style.borderRadius = '';
       }
     });
+
+    if (this.rotationOverlay) {
+      this.rotationOverlay.sync(this.selectedTokenIds);
+    }
   }
 
   toggleTokenHiddenState(tokenId) {
@@ -719,6 +756,10 @@ export class SceneManager {
       // Update the DOM elements
       this.sceneRenderer.updateTokenElement(token);
       this.sceneRenderer.updateTokenElement(nextToken);
+
+      if (this.rotationOverlay) {
+        this.rotationOverlay.sync(this.selectedTokenIds);
+      }
     }
   }
 
@@ -754,6 +795,10 @@ export class SceneManager {
       // Update the DOM elements
       this.sceneRenderer.updateTokenElement(token);
       this.sceneRenderer.updateTokenElement(prevToken);
+
+      if (this.rotationOverlay) {
+        this.rotationOverlay.sync(this.selectedTokenIds);
+      }
     }
   }
 
@@ -844,6 +889,10 @@ export class SceneManager {
         properties: { rotation: token.rotation },
       });
     });
+
+    if (this.rotationOverlay) {
+      this.rotationOverlay.sync(this.selectedTokenIds);
+    }
   }
 
   deleteCurrentScene() {
@@ -895,6 +944,10 @@ export class SceneManager {
       // Only re-setup interactions when interaction-relevant props change
       if ('movableByPlayers' in properties || 'hidden' in properties || 'visibleToPlayers' in properties || 'locked' in properties) {
         this.tokenManager.setupTokenInteractions(token);
+      }
+
+      if (this.rotationOverlay && ('rotation' in properties || 'zIndex' in properties)) {
+        this.rotationOverlay.sync(this.selectedTokenIds);
       }
     }
   }
