@@ -424,6 +424,7 @@
             zIndex: window.VTT_PAINT_LAYER ?? -10,
             movableByPlayers: false,
             hidden: false,
+            visibleToPlayers: true,
             isPaintTile: true,
             paintTool: activeTool,
           };

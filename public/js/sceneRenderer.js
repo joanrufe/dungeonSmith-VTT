@@ -82,7 +82,7 @@ export class SceneRenderer {
     if (this.isDM) {
       this.tokens = scene.tokens;
     } else {
-      this.tokens = scene.tokens.filter(token => !token.hidden);
+      this.tokens = scene.tokens.filter(token => !token.hidden && token.visibleToPlayers !== false);
     }
 
     // Sort tokens by zIndex
@@ -167,7 +167,7 @@ export class SceneRenderer {
     const BAR_H = 6, GAP = 3;
     let bar = document.getElementById(`hpbar-${token.tokenId}`);
     const hasHp = token.hpMax > 0 && token.hpCurrent != null;
-    if (!hasHp || (!this.isDM && token.hidden)) { if (bar) bar.remove(); return; }
+    if (!hasHp || (!this.isDM && (token.hidden || token.visibleToPlayers === false))) { if (bar) bar.remove(); return; }
     if (!bar) {
       bar = document.createElement('div');
       bar.id = `hpbar-${token.tokenId}`;
@@ -181,7 +181,7 @@ export class SceneRenderer {
     bar.style.top     = `${(token.y + this.offsetY) * this.scale - BAR_H - GAP}px`;
     bar.style.width   = `${token.width * this.scale}px`;
     bar.style.height  = `${BAR_H}px`;
-    bar.style.opacity = (this.isDM && token.hidden) ? '0.5' : '1';
+    bar.style.opacity = (this.isDM && token.visibleToPlayers === false) ? '0.4' : (this.isDM && token.hidden) ? '0.5' : '1';
     bar.querySelector('.token-hp-bar-fill').style.width      = `${pct * 100}%`;
     bar.querySelector('.token-hp-bar-fill').style.background = color;
   }
@@ -194,7 +194,7 @@ export class SceneRenderer {
     const BAR_H = 6, BAR_GAP = 3, LABEL_GAP = 2;
     let label = document.getElementById(`cond-${token.tokenId}`);
     const hasText = token.conditionText && token.conditionText.trim();
-    if (!hasText || (!this.isDM && token.hidden)) { if (label) label.remove(); return; }
+    if (!hasText || (!this.isDM && (token.hidden || token.visibleToPlayers === false))) { if (label) label.remove(); return; }
     if (!label) {
       label = document.createElement('div');
       label.id = `cond-${token.tokenId}`;
@@ -212,7 +212,7 @@ export class SceneRenderer {
     label.style.left         = `${(token.x + this.offsetX) * this.scale}px`;
     label.style.top          = `${(token.y + this.offsetY) * this.scale - totalOffset}px`;
     label.style.width        = `${token.width * this.scale}px`;
-    label.style.opacity      = (this.isDM && token.hidden) ? '0.5' : '1';
+    label.style.opacity      = (this.isDM && token.visibleToPlayers === false) ? '0.4' : (this.isDM && token.hidden) ? '0.5' : '1';
   }
 
   /**
@@ -220,7 +220,7 @@ export class SceneRenderer {
    * @returns {HTMLElement|undefined}
    */
   renderToken(token) {
-    if (!this.isDM && token.hidden) {
+    if (!this.isDM && (token.hidden || token.visibleToPlayers === false)) {
       return;
     }
 
@@ -253,8 +253,13 @@ export class SceneRenderer {
       element.style.pointerEvents = 'none';
     }
 
-    if (this.isDM && token.hidden) {
-      element.style.opacity = '0.5';
+    if (this.isDM) {
+      if (token.visibleToPlayers === false) {
+        element.style.opacity = '0.4';
+        element.classList.add('token-hidden-from-players');
+      } else if (token.hidden) {
+        element.style.opacity = '0.5';
+      }
     }
 
     if (token.locked) {
@@ -275,7 +280,7 @@ export class SceneRenderer {
   // Update all token elements
   updateAllTokenElements() {
     this.tokens.forEach((token) => {
-      if (!this.isDM && token.hidden) return; // Skip hidden tokens for players
+      if (!this.isDM && (token.hidden || token.visibleToPlayers === false)) return; // Skip hidden tokens for players
       this.updateTokenElement(token);
     });
 
@@ -310,8 +315,9 @@ export class SceneRenderer {
    */
   updateTokenElement(token) {
     const element = document.getElementById(`token-${token.tokenId}`);
-  
-    if (!this.isDM && token.hidden) {
+    const playerHidden = !this.isDM && (token.hidden || token.visibleToPlayers === false);
+
+    if (playerHidden) {
       if (element && element.parentNode === this.container) {
         this.container.removeChild(element);
       }
@@ -319,7 +325,7 @@ export class SceneRenderer {
       this._syncConditionLabel(token);
       return;
     }
-  
+
     if (element) {
       // Update element style
       element.style.left = `${(token.x + this.offsetX) * this.scale}px`;
@@ -331,13 +337,20 @@ export class SceneRenderer {
       element.style.outline       = token.locked ? '2px solid #ff3333' : '';
       element.style.outlineOffset = token.locked ? '1px' : '';
 
-      if (this.isDM && token.hidden) {
-        element.style.opacity = '0.5';
+      if (this.isDM) {
+        if (token.visibleToPlayers === false) {
+          element.style.opacity = '0.4';
+          element.classList.add('token-hidden-from-players');
+        } else {
+          element.classList.remove('token-hidden-from-players');
+          element.style.opacity = token.hidden ? '0.5' : '1';
+        }
       } else {
+        element.classList.remove('token-hidden-from-players');
         element.style.opacity = '1';
       }
-    } else if (!token.hidden || this.isDM) {
-      // Token element doesn't exist, create it if it's not hidden
+    } else if (this.isDM || (!token.hidden && token.visibleToPlayers !== false)) {
+      // Token element doesn't exist, create it if it's visible
       this.renderToken(token);
       // Optionally set up token interactions
     }

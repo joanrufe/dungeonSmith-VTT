@@ -14,7 +14,7 @@ export class TokenManager {
    */
   setupTokenInteractions(token) {
     if (token.isPaintTile) return;
-    if (!this.isDM && token.hidden) return;
+    if (!this.isDM && (token.hidden || token.visibleToPlayers === false)) return;
 
     const element = document.getElementById(`token-${token.tokenId}`);
     if (!element) return;

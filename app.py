@@ -36,6 +36,7 @@ class _TokenDictRequired(TypedDict):
 class TokenDict(_TokenDictRequired, total=False):
     name: str
     locked: bool
+    visibleToPlayers: bool
     isPaintTile: bool
     isAreaEffect: bool
     areaShape: str
@@ -298,6 +299,8 @@ class SceneStore:
                     properties["visionRadius"] = max(0.0, float(properties["visionRadius"]))
                 if "isMap" in properties:
                     properties["isMap"] = bool(properties["isMap"])
+                if "visibleToPlayers" in properties:
+                    properties["visibleToPlayers"] = bool(properties["visibleToPlayers"])
                 token.update(properties or {})
                 self.save_scene(scene)
                 return token, was_hidden, bool(token.get("hidden"))
@@ -988,6 +991,13 @@ def is_dm_socket() -> bool:
     return getattr(request, "sid", None) and socket_roles.get(request.sid) == "dm"
 
 
+def is_token_visible_to_players(token: Optional[Dict[str, Any]]) -> bool:
+    """A token is shown to players only when it is not hidden and is marked visible."""
+    if not token:
+        return False
+    return not token.get("hidden") and token.get("visibleToPlayers", True)
+
+
 socket_roles = {}
 
 
@@ -1016,7 +1026,7 @@ def socket_load_scene(data: Optional[Dict[str, Any]]) -> None:
         scene = scene_store.load_scene((data or {}).get("sceneId"))
         if socket_roles.get(request.sid) == "player":
             filtered = dict(scene)
-            filtered["tokens"] = [token for token in scene.get("tokens", []) if not token.get("hidden")]
+            filtered["tokens"] = [token for token in scene.get("tokens", []) if is_token_visible_to_players(token)]
             filtered.pop("walls", None)
             emit("sceneData", filtered)
             emit("wallsData", {"sceneId": scene["sceneId"], "walls": scene.get("walls", [])})
@@ -1049,20 +1059,25 @@ def socket_update_token(data: Optional[Dict[str, Any]]) -> None:
             return
     if is_dm_socket():
         history.before_mutation(scene_id)
+    # Capture visibility before mutation so we can add/remove the token from players when it changes.
+    pre_scene = scene_store.scenes.get(scene_id) or scene_store.load_scene(scene_id)
+    pre_token = next((t for t in pre_scene.get("tokens", []) if t.get("tokenId") == token_id), None)
+    was_visible = is_token_visible_to_players(pre_token)
     token, was_hidden, is_hidden = scene_store.update_token(scene_id, token_id, properties)
     if not token:
         return
-    if was_hidden != is_hidden:
-        if is_hidden:
-            emit("removeToken", {"sceneId": scene_id, "tokenId": token_id}, to="player", include_self=False)
-            emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, to="dm", include_self=False)
-        else:
+    is_visible = is_token_visible_to_players(token)
+    if was_visible != is_visible:
+        if is_visible:
             emit("addToken", {"sceneId": scene_id, "token": token}, to="player", include_self=False)
             emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, to="dm", include_self=False)
-    elif is_hidden:
-        emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, to="dm", include_self=False)
-    else:
+        else:
+            emit("removeToken", {"sceneId": scene_id, "tokenId": token_id}, to="player", include_self=False)
+            emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, to="dm", include_self=False)
+    elif is_visible:
         emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, broadcast=True, include_self=False)
+    else:
+        emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, to="dm", include_self=False)
     if is_dm_socket():
         can_undo, can_redo = history.state(scene_id)
         socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
@@ -1073,10 +1088,13 @@ def socket_add_token(data: Optional[Dict[str, Any]]) -> None:
     if not is_dm_socket():
         return
     scene_id = (data or {}).get("sceneId")
-    token = (data or {}).get("token")
+    token = (data or {}).get("token") or {}
+    token.setdefault("visibleToPlayers", True)
     history.before_mutation(scene_id)
     scene_store.add_token(scene_id, token)
-    socketio.emit("addToken", {"sceneId": scene_id, "token": token})
+    socketio.emit("addToken", {"sceneId": scene_id, "token": token}, to="dm")
+    if is_token_visible_to_players(token):
+        socketio.emit("addToken", {"sceneId": scene_id, "token": token}, to="player")
     can_undo, can_redo = history.state(scene_id)
     socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
@@ -1285,10 +1303,13 @@ def socket_add_token_from_library(data: Optional[Dict[str, Any]]) -> None:
         "zIndex": max_z + 1,
         "movableByPlayers": False,
         "hidden": False,
+        "visibleToPlayers": True,
     }
     history.before_mutation(scene_store.active_scene_id)
     scene_store.add_token(scene_store.active_scene_id, token)
-    socketio.emit("addToken", {"sceneId": scene_store.active_scene_id, "token": token})
+    socketio.emit("addToken", {"sceneId": scene_store.active_scene_id, "token": token}, to="dm")
+    if is_token_visible_to_players(token):
+        socketio.emit("addToken", {"sceneId": scene_store.active_scene_id, "token": token}, to="player")
     can_undo, can_redo = history.state(scene_store.active_scene_id)
     socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
 
@@ -1300,7 +1321,7 @@ def _apply_snapshot_and_broadcast(scene_id: str, snapshot: Dict[str, Any]) -> No
     scene_store.save_scene(scene)
     socketio.emit("sceneData", scene, to="dm")
     filtered = dict(scene)
-    filtered["tokens"] = [t for t in scene.get("tokens", []) if not t.get("hidden")]
+    filtered["tokens"] = [t for t in scene.get("tokens", []) if is_token_visible_to_players(t)]
     filtered.pop("walls", None)
     socketio.emit("sceneData", filtered, to="player")
     socketio.emit("wallsData", {"sceneId": scene_id, "walls": scene.get("walls", [])}, to="player")

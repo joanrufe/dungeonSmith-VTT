@@ -14,6 +14,7 @@
  * @property {number}  zIndex
  * @property {boolean} movableByPlayers
  * @property {boolean} hidden
+ * @property {boolean} [visibleToPlayers]
  * @property {string}  [name]
  * @property {boolean} [locked]
  * @property {boolean} [isPaintTile]
@@ -626,18 +627,10 @@ export class SceneManager {
     const token = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
     if (token) {
       token.hidden = !token.hidden;
-  
-      // Update the token's visual representation
-      const element = document.getElementById(`token-${tokenId}`);
-      if (element) {
-        if (token.hidden) {
-          // Apply visual indicator (e.g., reduced opacity)
-          element.style.opacity = '0.5';
-        } else {
-          element.style.opacity = '1';
-        }
-      }
-  
+
+      // Update the token's visual representation (handles both hidden and visibleToPlayers)
+      this.sceneRenderer.updateTokenElement(token);
+
       // Send update to server
       this.socket.emit('updateToken', {
         sceneId: this.currentScene.sceneId,
@@ -900,7 +893,7 @@ export class SceneManager {
       }
 
       // Only re-setup interactions when interaction-relevant props change
-      if ('movableByPlayers' in properties || 'hidden' in properties || 'locked' in properties) {
+      if ('movableByPlayers' in properties || 'hidden' in properties || 'visibleToPlayers' in properties || 'locked' in properties) {
         this.tokenManager.setupTokenInteractions(token);
       }
     }
@@ -945,7 +938,7 @@ export class SceneManager {
     const msg = document.createElement('div');
     msg.id = 'no-scene-msg';
     msg.className = 'no-scene-msg';
-    msg.innerHTML = `<img src="./SceneSmith.png" class="no-scene-logo" alt="SceneSmith VTT"><div class="no-scene-label">Pick a Scene</div>`;
+    msg.innerHTML = `<img src="./DungeonSmith.png" class="no-scene-logo" alt="DungeonSmith VTT"><div class="no-scene-label">Pick a Scene</div>`;
     this.sceneContainer.appendChild(msg);
   }
 
@@ -1025,6 +1018,7 @@ export class SceneManager {
           rotation: 0,
           zIndex: this.getMaxZIndex() + 1,
           movableByPlayers: false,
+          visibleToPlayers: true,
           name: fileName,
         };
   

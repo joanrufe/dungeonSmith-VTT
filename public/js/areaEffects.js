@@ -122,6 +122,7 @@
       zIndex:           200,
       hidden:           false,
       movableByPlayers: false,
+      visibleToPlayers: true,
       rotation:         0,
       isAreaEffect:     true,
       areaShape:        activeShape,

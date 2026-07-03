@@ -1,4 +1,4 @@
-/* SceneSmith VTT DM UI */
+/* DungeonSmith VTT DM UI */
 #toolbar {
   position: fixed;
   top: 0;
@@ -643,6 +643,11 @@
   fill: #00ffff;
   stroke: #fff;
   stroke-width: 2;
+}
+
+/* DM-only indicator for tokens hidden from players (visibleToPlayers === false) */
+.token.token-hidden-from-players {
+  filter: grayscale(70%);
 }
 
 /* Music panel */
