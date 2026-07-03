@@ -1,6 +1,6 @@
 # DungeonSmith VTT
 
-A fork of [SceneSmith-VTT](https://github.com/Echoshard/SceneSmith-VTT), itself an expanded fork of [MiniVTT](https://github.com/SamsterJam/MiniVTT). DungeonSmith VTT keeps the original "everything is a token" simplicity while adding a larger DM toolset: media organization, paint tools, initiative announcements, 3D dice, ruler mode, player-facing sync, music controls, sticky notes, and quality-of-life updates for running sessions quickly.
+A fork of [SceneSmith-VTT](https://github.com/Echoshard/SceneSmith-VTT), itself an expanded fork of [MiniVTT](https://github.com/SamsterJam/MiniVTT). DungeonSmith VTT keeps the original "everything is a token" simplicity while adding a larger DM toolset: media organization, paint tools, initiative announcements, 3D dice, ruler mode, player-facing sync, music controls, sticky notes, fog of war, and quality-of-life updates for running sessions quickly.
 
 Original upstream project:  
 https://github.com/Echoshard/SceneSmith-VTT
@@ -27,11 +27,9 @@ These are the core ideas and baseline capabilities inherited from MiniVTT:
 
 **Music support** - Upload and play music for connected clients.
 
-### Added In DungeonSmith VTT
+### Added In SceneSmith-VTT
 
-These are the major additions and expansions in this fork:
-
-**Token visibility toggle** - The DM can hide tokens from players with a simple checkbox in the token status popup. Hidden tokens are filtered out of player views and shown ghosted to the DM, making it easy to keep surprises off the player screen.
+These features were introduced by the upstream SceneSmith-VTT fork before the DungeonSmith split:
 
 **Expanded DM toolbar and floating panels** - DM tools live in draggable panels with a right-side tray for Initiative, Paint, Effects, Dice, Music, and Notes.
 
@@ -66,6 +64,18 @@ These are the major additions and expansions in this fork:
 **Token lock** - Press `L` to lock a selected token. Locked tokens show a red outline, cannot be moved or resized by anyone, but remain selectable and deletable.
 
 **Player Files** - A player-accessible media library at `/player-files`. Players can browse and double-click any file to download it. A **DM Mode** toggle (requires DM password) unlocks upload, file deletion, and folder management.
+
+### Added In DungeonSmith VTT
+
+These features were added after the DungeonSmith fork split from SceneSmith-VTT commit `532b5317db9ab9f650af7c96a37c9d85a09a3e44`:
+
+**Token visibility toggle** - The DM can hide tokens from players with a simple checkbox in the token status popup. Hidden tokens are filtered out of player views and shown ghosted to the DM, making it easy to keep surprises off the player screen.
+
+**Fog of war / line-of-sight** - Draw closed-polygon walls on the DM view to block player vision. Players see a canvas fog overlay with transparent visibility holes centered on non-hidden tokens that have a configured vision radius. Includes WarFog opacity control and map-token support so background maps do not act as vision sources.
+
+**Arrow key nudge movement** - Nudge selected tokens one grid cell at a time with the arrow keys.
+
+**Undo/redo for scene mutations** - DM-only undo and redo (Ctrl+Z / Ctrl+Shift+Z plus tool-tray buttons) for token-property and wall changes. Initiative, grid settings, sticky notes, music, and scene CRUD are not tracked by history.
 
 ---
 
@@ -126,7 +136,7 @@ Passwords can be changed in the DM Admin area or by editing `data/private/secret
 **DMs can:**
 - Create and manage scenes, tokens, maps, media, and music
 - Control visibility, movement permissions, grid, snap view, and initiative
-- Use paint, ruler, effects, dice, pings, and private sticky notes
+- Use paint, ruler, effects, dice, pings, fog of war, walls, and private sticky notes
 - Organize uploads and change DM/player passwords from the media library
 
 **Players can:**
@@ -138,11 +148,11 @@ Passwords can be changed in the DM Admin area or by editing `data/private/secret
 
 ### DM View
 
-Open `/dm` to manage scenes, tokens, music, initiative, dice, paint tools, area effects, sticky notes, grid controls, and player view syncing. Scenes are selected from the dropdown in the toolbar; pin frequently used scenes for quick access.
+Open `/dm` to manage scenes, tokens, music, initiative, dice, paint tools, area effects, sticky notes, grid controls, walls, fog of war, and player view syncing. Scenes are selected from the dropdown in the toolbar; pin frequently used scenes for quick access.
 
 ### Player View
 
-Players open `/` and see the active scene, visible tokens, initiative callouts, dice rolls, music, pings, and their own private sticky notes. A "Please Wait" screen is shown until the DM loads a scene.
+Players open `/` and see the active scene, visible tokens, initiative callouts, dice rolls, music, pings, fog of war, and their own private sticky notes. A "Please Wait" screen is shown until the DM loads a scene.
 
 ### DM Admin
 
@@ -176,6 +186,8 @@ Open `/player-files` for the player-facing media library.
 - `T` - Toggle DM toolbar
 - `Shift+D` - Delete current scene
 - `Double-click` canvas or token - Ping location
+- `Arrow keys` - Nudge selected token one grid cell
+- `Ctrl+Z` / `Ctrl+Shift+Z` - Undo / redo token or wall changes
 
 > Keyboard shortcuts are automatically disabled while typing in a sticky note.
 
