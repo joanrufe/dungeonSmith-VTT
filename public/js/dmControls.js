@@ -150,6 +150,7 @@
     bindUndoRedoState();
 
     // ── Panel pop-out toggles from tray ───────────────────
+    // Backups panel is toggled by sceneManager.setupBackupsPanel()
     setupPanelToggle('init-toggle-btn',  'initiative-panel');
     setupPanelToggle('paint-toggle-btn', 'paint-panel');
     setupPanelToggle('ae-toggle-btn',    'area-effect-panel');
