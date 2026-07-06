@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import datetime
 import json
+import logging
 import mimetypes
 import os
 import random
@@ -15,6 +17,10 @@ from flask import Flask, Response, jsonify, redirect, request, send_from_directo
 from flask_socketio import SocketIO, emit, join_room
 from werkzeug.utils import secure_filename
 
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+logger = logging.getLogger(__name__)
 
 # ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -93,6 +99,7 @@ BASE_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = BASE_DIR / "public"
 DATA_DIR = BASE_DIR / "data"
 SCENES_DIR = DATA_DIR / "scenes"
+BACKUPS_DIR = SCENES_DIR / "backups"
 SECRET_DIR = DATA_DIR / "private"
 SECRET_FILE = SECRET_DIR / "secrets.txt"
 LEGACY_SECRET_FILE = BASE_DIR / "secret.txt"
@@ -106,6 +113,9 @@ DEFAULT_SECRETS = {
     "DM_PASSWORD": "DMCODE",
     "PLAYER_PASSWORD": "PLAY",
 }
+
+BACKUP_EVERY_N_SAVES = 10
+MAX_TOTAL_BACKUPS = 20
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 VIDEO_EXTS = {".mp4", ".webm", ".ogv", ".mov"}
@@ -204,7 +214,85 @@ class SceneStore:
     def __init__(self) -> None:
         self.active_scene_id: Optional[SceneId] = None
         self.scenes: Dict[SceneId, SceneDict] = {}
+        self._backup_lock = threading.Lock()
         SCENES_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _backup_state_file(self) -> Path:
+        return DATA_DIR / "scenes-backup-state.json"
+
+    def _backup_timestamp(self) -> str:
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+
+    def _backup_path(self, scene_id: SceneId, timestamp: Optional[str] = None) -> Path:
+        return SCENES_DIR / "backups" / f"{scene_id}-{timestamp or self._backup_timestamp()}.json"
+
+    def _load_save_counts(self) -> Dict[SceneId, int]:
+        path = self._backup_state_file()
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to read backup state file %s: %s", path, exc)
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {
+            str(k): int(v)
+            for k, v in data.items()
+            if isinstance(v, (int, float))
+        }
+
+    def _save_save_counts(self, counts: Dict[SceneId, int]) -> None:
+        path = self._backup_state_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.write_text(json.dumps(counts, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError as exc:
+            logger.error("Failed to write backup state file %s: %s", path, exc)
+
+    def _prune_old_backups(self) -> None:
+        backups_dir = SCENES_DIR / "backups"
+        if not backups_dir.exists():
+            return
+        backups = sorted(backups_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        while len(backups) > MAX_TOTAL_BACKUPS:
+            oldest = backups.pop(0)
+            try:
+                oldest.unlink()
+                logger.info(
+                    "Removed oldest backup %s to keep global limit of %s",
+                    oldest.name,
+                    MAX_TOTAL_BACKUPS,
+                )
+            except OSError as exc:
+                logger.error("Failed to remove old backup %s: %s", oldest, exc)
+
+    def _create_backup(self, scene_id: SceneId) -> Optional[Path]:
+        backups_dir = SCENES_DIR / "backups"
+        backups_dir.mkdir(parents=True, exist_ok=True)
+        source = self.path_for(scene_id)
+        if not source.exists():
+            logger.warning("Cannot backup scene %s: source file missing", scene_id)
+            return None
+        backup_path = self._backup_path(scene_id)
+        try:
+            shutil.copyfile(source, backup_path)
+            logger.info("Created backup for scene %s: %s", scene_id, backup_path.name)
+            self._prune_old_backups()
+            return backup_path
+        except OSError as exc:
+            logger.error("Failed to create backup for scene %s: %s", scene_id, exc)
+            return None
+
+    def _record_scene_save(self, scene_id: SceneId) -> None:
+        with self._backup_lock:
+            counts = self._load_save_counts()
+            counts[scene_id] = counts.get(scene_id, 0) + 1
+            if counts[scene_id] >= BACKUP_EVERY_N_SAVES:
+                counts[scene_id] = 0
+                self._create_backup(scene_id)
+            self._save_save_counts(counts)
 
     def path_for(self, scene_id: SceneId) -> Path:
         return SCENES_DIR / f"{scene_id}.json"
@@ -219,7 +307,11 @@ class SceneStore:
             scene.setdefault("fogOpacity", 1.0)
             return scene
         path = self.path_for(scene_id)
-        scene = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            scene = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            logger.warning("Failed to parse scene %s at %s: %s", scene_id, path, exc)
+            raise
         scene.setdefault("walls", [])
         scene.setdefault("fogOpacity", 1.0)
         self.scenes[scene_id] = scene
@@ -227,14 +319,77 @@ class SceneStore:
 
     def save_scene(self, scene: SceneDict) -> None:
         SCENES_DIR.mkdir(parents=True, exist_ok=True)
-        self.path_for(scene["sceneId"]).write_text(json.dumps(scene, indent=2), encoding="utf-8")
+        self.path_for(scene["sceneId"]).write_text(
+            json.dumps(scene, indent=2), encoding="utf-8"
+        )
+        self._record_scene_save(scene["sceneId"])
+
+    def list_backups(self, scene_id: SceneId) -> List[Dict[str, Any]]:
+        backups_dir = SCENES_DIR / "backups"
+        entries: List[Dict[str, Any]] = []
+        if not backups_dir.exists():
+            return entries
+        prefix = f"{scene_id}-"
+        for path in backups_dir.glob("*.json"):
+            if not path.stem.startswith(prefix):
+                continue
+            try:
+                stat = path.stat()
+                entries.append({
+                    "backupId": path.stem,
+                    "createdAt": int(stat.st_mtime * 1000),
+                })
+            except OSError:
+                continue
+        entries.sort(key=lambda item: item["createdAt"], reverse=True)
+        return entries
+
+    def restore_backup(self, scene_id: SceneId, backup_id: str) -> None:
+        backups_dir = SCENES_DIR / "backups"
+        backup_path = backups_dir / f"{backup_id}.json"
+        if not backup_path.exists():
+            raise FileNotFoundError(f"Backup {backup_id} not found")
+        if not backup_path.stem.startswith(f"{scene_id}-"):
+            raise ValueError(f"Backup {backup_id} does not belong to scene {scene_id}")
+        scene_path = self.path_for(scene_id)
+        if not scene_path.exists():
+            raise FileNotFoundError(f"Scene {scene_id} not found")
+
+        # Preserve the current state before overwriting it. The per-scene
+        # save counter is intentionally not touched here.
+        current_backup_path = self._backup_path(scene_id)
+        try:
+            shutil.copyfile(scene_path, current_backup_path)
+            logger.info(
+                "Pre-restore backup of current scene %s: %s",
+                scene_id,
+                current_backup_path.name,
+            )
+        except OSError as exc:
+            logger.error("Failed to backup current scene before restore: %s", exc)
+            raise
+
+        try:
+            shutil.copyfile(backup_path, scene_path)
+        except OSError as exc:
+            logger.error(
+                "Failed to restore backup %s for scene %s: %s",
+                backup_path.name,
+                scene_id,
+                exc,
+            )
+            raise
+
+        self.scenes.pop(scene_id, None)
+        logger.info("Restored scene %s from backup %s", scene_id, backup_id)
 
     def get_all_scenes(self) -> List[Dict[str, Any]]:
         scenes = []
         for path in SCENES_DIR.glob("*.json"):
             try:
                 scene = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Skipping unreadable scene file %s: %s", path, exc)
                 continue
             scenes.append({
                 "sceneId": scene.get("sceneId"),
@@ -271,7 +426,8 @@ class SceneStore:
         for path in SCENES_DIR.glob("*.json"):
             try:
                 scene = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Skipping unreadable scene file %s while checking image reuse: %s", path, exc)
                 continue
             for token in scene.get("tokens", []):
                 if token.get("imageUrl") == image_url:
@@ -663,6 +819,29 @@ def update_scene_order() -> RouteReturn:
         return jsonify({"success": True})
     except Exception:
         return jsonify({"success": False, "message": "Failed to update scene order"})
+
+
+@app.get("/api/scenes/<sceneId>/backups")
+def list_scene_backups(sceneId: SceneId) -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    try:
+        return jsonify({"backups": scene_store.list_backups(sceneId)})
+    except Exception:
+        return jsonify({"backups": []}), 500
+
+
+@app.post("/api/scenes/<sceneId>/backups/<backupId>/restore")
+def restore_scene_backup(sceneId: SceneId, backupId: str) -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    try:
+        scene_store.restore_backup(sceneId, backupId)
+        socketio.emit("sceneReloadRequested", {"sceneId": sceneId})
+        return jsonify({"success": True})
+    except Exception as exc:
+        logger.exception("Failed to restore backup %s for scene %s", backupId, sceneId)
+        return jsonify({"success": False, "message": str(exc)}), 500
 
 
 @app.post("/upload")

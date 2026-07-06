@@ -26,6 +26,9 @@
       onmouseover="this.style.backgroundColor='rgba(255,122,24,0.22)';this.style.borderColor='#ff7a18'"
       onmouseout="this.style.backgroundColor='#151515';this.style.borderColor='rgba(255,255,255,0.16)'"><i class="fa-solid fa-copy"></i> Duplicate Scene</button>
 
+    <!-- Scene Backups -->
+    <button id="backups-toggle-btn" class="toolbar-panel-btn" title="Scene Backups" style="margin-right:10px;"><i class="fa-solid fa-clock-rotate-left"></i> Backups</button>
+
     <div style="height:20px;width:1px;background:#555;margin-right:10px;"></div>
 
     <!-- Dropdown + pinned scenes (pins appear to the RIGHT of dropdown) -->
@@ -277,6 +280,13 @@
       <span id="warfog-opacity-display" class="warfog-opacity-display">100%</span>
     </div>
     <p class="warfog-hint">Per-scene fog darkness shown to players. 0% = no fog, 100% = full darkness (default). Lives here so future fog settings can join the panel.</p>
+  </div>
+
+  <!-- ═══ BACKUPS PANEL (floating pop-out) ═══ -->
+  <div id="backups-panel" class="draggable-panel panel-hidden">
+    <div class="panel-drag-handle"><span><i class="fa-solid fa-clock-rotate-left"></i> Scene Backups</span><span class="drag-hint">☰</span></div>
+    <p id="backups-hint" class="backups-hint">Backups are created automatically every 10 saves of the active scene.</p>
+    <ul id="backups-list"></ul>
   </div>
 
   <!-- ═══ DICE PANEL (floating pop-out) ═══ -->

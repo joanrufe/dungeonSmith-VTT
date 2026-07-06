@@ -167,6 +167,7 @@
     makeDraggable(document.getElementById('dice-panel'));
     makeDraggable(document.getElementById('walls-panel'));
     makeDraggable(document.getElementById('warfog-panel'));
+    makeDraggable(document.getElementById('backups-panel'));
 
     // ── Walls panel shortcut ──────────────────────────────
     document.addEventListener('keydown', (event) => {

@@ -90,6 +90,7 @@ export class SceneManager {
     this.setupSceneContainerListeners();
     this.fetchSceneList();
     this.setupKeyListeners();
+    this.setupBackupsPanel();
   }
 
   setupSocketListeners() {
@@ -169,6 +170,12 @@ export class SceneManager {
       this.currentScene.fogOpacity = v;
       // warFogTool owns the slider UI; it listens for fogOpacity too
       // and updates itself. Nothing else for the scene manager to do.
+    });
+
+    this.socket.on('sceneReloadRequested', ({ sceneId }) => {
+      if (this.currentScene && this.currentScene.sceneId === sceneId) {
+        this.loadScene(sceneId);
+      }
     });
 
     // Add other socket event handlers as needed
@@ -348,6 +355,92 @@ export class SceneManager {
 
   loadScene(sceneId) {
     this.socket.emit('loadScene', { sceneId: sceneId });
+  }
+
+  // ── Scene backups UI ────────────────────────────────────────
+  setupBackupsPanel() {
+    const btn = document.getElementById('backups-toggle-btn');
+    const panel = document.getElementById('backups-panel');
+    if (!btn || !panel) return;
+
+    btn.addEventListener('click', () => {
+      const willOpen = panel.classList.contains('panel-hidden');
+      panel.classList.toggle('panel-hidden');
+      btn.classList.toggle('active-tool-btn', willOpen);
+      if (willOpen) this.fetchBackups();
+    });
+  }
+
+  fetchBackups() {
+    if (!this.currentScene) {
+      this._renderBackups([]);
+      return;
+    }
+    fetch(`/api/scenes/${this.currentScene.sceneId}/backups`)
+      .then((response) => (response.ok ? response.json() : { backups: [] }))
+      .then((data) => {
+        this._renderBackups(data.backups || []);
+      })
+      .catch((error) => {
+        console.error('Error fetching backups:', error);
+        this._renderBackups([]);
+      });
+  }
+
+  _renderBackups(backups) {
+    const list = document.getElementById('backups-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!this.currentScene) {
+      list.innerHTML = '<li class="backup-empty">Load a scene to see its backups.</li>';
+      return;
+    }
+
+    if (!backups.length) {
+      list.innerHTML = '<li class="backup-empty">No backups yet for this scene.</li>';
+      return;
+    }
+
+    backups.forEach((backup, index) => {
+      const li = document.createElement('li');
+      li.className = 'backup-item';
+      const dateStr = new Date(backup.createdAt).toLocaleString();
+      li.innerHTML = `<span class="backup-info">#${index + 1} — ${dateStr}</span>`;
+
+      const restoreBtn = document.createElement('button');
+      restoreBtn.className = 'backup-restore-btn';
+      restoreBtn.title = 'Restore this backup';
+      restoreBtn.innerHTML = '<i class="fa-solid fa-rotate-left"></i>';
+      restoreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.restoreBackup(backup.backupId);
+      });
+
+      li.appendChild(restoreBtn);
+      list.appendChild(li);
+    });
+  }
+
+  restoreBackup(backupId) {
+    if (!this.currentScene) return;
+    if (!confirm('Restore this backup? The current scene state will be saved as a new backup first.')) return;
+
+    fetch(`/api/scenes/${this.currentScene.sceneId}/backups/${backupId}/restore`, {
+      method: 'POST',
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.success) {
+          this.loadScene(this.currentScene.sceneId);
+        } else {
+          alert(data.message || 'Restore failed.');
+        }
+      })
+      .catch((error) => {
+        console.error('Error restoring backup:', error);
+        alert('Restore failed.');
+      });
   }
 
   /**
