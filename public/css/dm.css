@@ -772,3 +772,209 @@
   font-size: 12px;
   text-align: center;
 }
+
+/* ── Scene Dropdown Folders ─────────────────────────────── */
+
+.scene-dd-root {
+  display: flex;
+  flex-direction: column;
+}
+
+.scene-dd-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 122, 24, 0.25);
+  background: rgba(255, 122, 24, 0.08);
+}
+
+.scene-dd-header-title {
+  flex: 1;
+  color: var(--ss-orange);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scene-dd-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  user-select: none;
+}
+
+.scene-dd-folder-header.root-folder {
+  background: transparent;
+  cursor: default;
+}
+
+.scene-dd-folder-header:hover:not(.root-folder) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.scene-dd-folder-header.drag-over {
+  background: rgba(255, 122, 24, 0.22) !important;
+  border-color: var(--ss-orange);
+}
+
+.scene-dd-chevron {
+  width: 12px;
+  color: var(--ss-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.scene-dd-folder-name {
+  flex: 1;
+  color: #bbb;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scene-dd-folder-header.root-folder .scene-dd-folder-name {
+  color: #fff;
+}
+
+.scene-dd-folder-meta {
+  color: var(--ss-dim);
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+.scene-dd-folder-action {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+  font-size: 12px;
+  padding: 3px 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.scene-dd-folder-action:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.scene-dd-folder-scenes {
+  display: flex;
+  flex-direction: column;
+}
+
+.scene-dd-folder-scenes.root-folder-scenes {
+  background: transparent;
+}
+
+.scene-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px 6px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+}
+
+.scene-dd-item:hover { background: var(--ss-control-hover); }
+.scene-dd-item.active { background: rgba(180, 40, 40, 0.25); border-left: 3px solid var(--ss-red); }
+
+.scene-dd-item.dragging {
+  opacity: 0.4;
+}
+
+.scene-dd-item.drag-target {
+  border-top: 2px solid var(--ss-orange);
+}
+
+.scene-dd-drag-handle {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  cursor: grab;
+  padding: 2px 4px;
+}
+
+.scene-dd-item:hover .scene-dd-drag-handle {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.scene-dd-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ddd;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scene-dd-name-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scene-dd-item.active .scene-dd-name { color: #fff; font-weight: 600; }
+.scene-dd-item:hover .scene-dd-name  { color: #fff; }
+
+.scene-dd-edit {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.25) !important;
+  font-size: 11px;
+  padding: 3px 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.scene-dd-name:hover .scene-dd-edit {
+  opacity: 1;
+}
+
+.scene-dd-edit:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.scene-dd-rename-input {
+  flex: 1;
+  background: #151515;
+  border: 1px solid var(--ss-orange);
+  color: #fff;
+  font-size: 13px;
+  padding: 2px 5px;
+  outline: none;
+}
+
+.scene-dd-pin {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.25) !important;
+  font-size: 12px;
+  padding: 3px 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transform: rotate(45deg);
+  transition: color 0.15s, transform 0.15s;
+}
+
+.scene-dd-pin.pinned {
+  color: var(--ss-orange) !important;
+  transform: rotate(0deg);
+}
+
+.scene-dd-pin:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}

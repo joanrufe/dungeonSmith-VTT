@@ -41,17 +41,18 @@
  * @property {WallPointDict[]} points
  */
 
-/**
- * @typedef {Object} SceneDict
- * @property {string}      sceneId
- * @property {string}      sceneName
- * @property {TokenDict[]} tokens
- * @property {WallDict[]}  [walls]
- * @property {number}      [order]
- */
+  /**
+   * @typedef {Object} SceneDict
+   * @property {string}      sceneId
+   * @property {string}      sceneName
+   * @property {TokenDict[]} tokens
+   * @property {WallDict[]}  [walls]
+   * @property {number}      [order]
+   * @property {string}      [folder]
+   */
 
-/**
- * @typedef {Object} StickyNoteDict
+  /**
+   * @typedef {Object} StickyNoteDict
  * @property {string} id
  * @property {number} x
  * @property {number} y
@@ -73,8 +74,11 @@ export class SceneManager {
     this.selectedTokenId = null;
     this.selectedTokenIds = new Set();
     this.allScenes = [];
+    this.sceneFolders = [];
     this.pinnedSceneIds = this._loadPinnedScenes();
     this._dropdownSetup = false;
+    this._expandedFolders = new Set(); // empty string = root
+    this._dragState = { sceneId: null, sourceFolder: '' };
 
     if (this.rotationOverlay) {
       this.sceneRenderer.onUpdateAll = () => {
@@ -203,6 +207,7 @@ export class SceneManager {
       .then((response) => response.json())
       .then((data) => {
         this.renderSceneButtons(data.scenes);
+        this.fetchSceneFolders();
       })
       .catch((error) => {
         console.error('Error fetching scene list:', error);
@@ -270,21 +275,177 @@ export class SceneManager {
     const menu = document.getElementById('scene-dropdown-menu');
     if (!menu) return;
     menu.innerHTML = '';
+
+    const root = document.createElement('div');
+    root.className = 'scene-dd-root';
+
+    // Header bar: folder controls
+    const header = document.createElement('div');
+    header.className = 'scene-dd-header';
+    header.innerHTML = '<span class="scene-dd-header-title"><i class="fa-solid fa-folder-tree"></i> Scenes</span>';
+
+    const addFolderBtn = document.createElement('button');
+    addFolderBtn.className = 'scene-dd-folder-action';
+    addFolderBtn.title = 'Create folder';
+    addFolderBtn.innerHTML = '<i class="fa-solid fa-folder-plus"></i>';
+    addFolderBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._promptCreateFolder();
+    });
+    header.appendChild(addFolderBtn);
+    root.appendChild(header);
+
+    // Build folder groups
+    const folders = Array.from(new Set([
+      ...this._folderList(),
+      ...Array.from(this._expandedFolders).filter(f => f !== ''),
+    ])).sort((a, b) => a.localeCompare(b));
+    const scenesByFolder = this._groupScenesByFolder();
+
+    // Render root group first
+    this._renderFolderBlock(root, '', scenesByFolder.get('') || [], true);
+
+    // Then named folders
+    folders.forEach(folder => {
+      this._renderFolderBlock(root, folder, scenesByFolder.get(folder) || [], false);
+    });
+
+    menu.appendChild(root);
+  }
+
+  _folderList() {
+    const folders = new Set(this.allScenes.map(s => (s.folder || '').trim()).filter(Boolean));
+    return Array.from(folders).sort((a, b) => a.localeCompare(b));
+  }
+
+  _groupScenesByFolder() {
+    const map = new Map();
+    // Keep existing order from get_all_scenes (sorted by order then name)
     this.allScenes.forEach(scene => {
+      const folder = (scene.folder || '').trim();
+      if (!map.has(folder)) map.set(folder, []);
+      map.get(folder).push(scene);
+    });
+    return map;
+  }
+
+  _renderFolderBlock(container, folder, scenes, isRoot) {
+    const expanded = this._expandedFolders.has(folder) || isRoot;
+
+    const header = document.createElement('div');
+    header.className = 'scene-dd-folder-header' + (isRoot ? ' root-folder' : '') + (expanded ? ' expanded' : '');
+    header.dataset.folder = folder;
+    header.draggable = false;
+
+    const chevron = document.createElement('span');
+    chevron.className = 'scene-dd-chevron';
+    chevron.innerHTML = isRoot ? '' : `<i class="fa-solid fa-caret-${expanded ? 'down' : 'right'}"></i>`;
+    header.appendChild(chevron);
+
+    const title = document.createElement('span');
+    title.className = 'scene-dd-folder-name';
+    title.textContent = isRoot ? 'Root' : folder;
+    title.title = isRoot ? 'Unfoldered scenes' : folder;
+    header.appendChild(title);
+
+    const meta = document.createElement('span');
+    meta.className = 'scene-dd-folder-meta';
+    meta.textContent = scenes.length.toString();
+    header.appendChild(meta);
+
+    if (!isRoot) {
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'scene-dd-folder-action';
+      renameBtn.title = 'Rename folder';
+      renameBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      renameBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._promptRenameFolder(folder);
+      });
+      header.appendChild(renameBtn);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'scene-dd-folder-action';
+      deleteBtn.title = 'Delete folder (scenes move to Root)';
+      deleteBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+      deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this._deleteFolder(folder);
+      });
+      header.appendChild(deleteBtn);
+
+      // Allow dropping scenes onto folder header to move them here
+      header.addEventListener('dragover', (e) => {
+        if (!this._dragState.sceneId) return;
+        e.preventDefault();
+        header.classList.add('drag-over');
+      });
+      header.addEventListener('dragleave', () => header.classList.remove('drag-over'));
+      header.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        header.classList.remove('drag-over');
+        const { sceneId, sourceFolder } = this._dragState;
+        if (!sceneId || sourceFolder === folder) return;
+        await this._setSceneFolder(sceneId, folder);
+      });
+
+      // Toggle expand/collapse
+      header.addEventListener('click', () => {
+        if (expanded) this._expandedFolders.delete(folder);
+        else this._expandedFolders.add(folder);
+        this._renderDropdownMenu();
+      });
+    }
+
+    container.appendChild(header);
+
+    if (!expanded) return;
+
+    const list = document.createElement('div');
+    list.className = 'scene-dd-folder-scenes' + (isRoot ? ' root-folder-scenes' : '');
+    list.dataset.folder = folder;
+
+    scenes.forEach((scene, index) => {
       const isPinned = this.pinnedSceneIds.includes(scene.sceneId);
       const isActive = this.currentScene?.sceneId === scene.sceneId;
 
       const item = document.createElement('div');
       item.className = 'scene-dd-item' + (isActive ? ' active' : '');
       item.dataset.sceneId = scene.sceneId;
+      item.dataset.folder = folder;
+      item.draggable = true;
 
-      const namePart = document.createElement('span');
-      namePart.className = 'scene-dd-name';
-      namePart.textContent = scene.sceneName;
-      namePart.addEventListener('click', () => {
+      const dragHandle = document.createElement('span');
+      dragHandle.className = 'scene-dd-drag-handle';
+      dragHandle.title = 'Drag to reorder or move to folder';
+      dragHandle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+      item.appendChild(dragHandle);
+
+      const nameWrapper = document.createElement('span');
+      nameWrapper.className = 'scene-dd-name';
+      nameWrapper.title = scene.sceneName;
+
+      const nameText = document.createElement('span');
+      nameText.className = 'scene-dd-name-text';
+      nameText.textContent = scene.sceneName;
+      nameWrapper.appendChild(nameText);
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'scene-dd-edit';
+      editBtn.title = 'Rename scene';
+      editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._startRenameScene(scene, item, nameWrapper);
+      });
+      nameWrapper.appendChild(editBtn);
+
+      nameWrapper.addEventListener('click', (e) => {
+        if (e.target.closest('.scene-dd-edit')) return;
         this.onSceneButtonClick(scene);
         this._closeDropdown();
       });
+      item.appendChild(nameWrapper);
 
       const pinBtn = document.createElement('button');
       pinBtn.className = 'scene-dd-pin' + (isPinned ? ' pinned' : '');
@@ -297,11 +458,252 @@ export class SceneManager {
         if (isPinned) this.unpinScene(scene.sceneId);
         else this.pinScene(scene.sceneId);
       });
-
-      item.appendChild(namePart);
       item.appendChild(pinBtn);
-      menu.appendChild(item);
+
+      // Drag start
+      item.addEventListener('dragstart', (e) => {
+        this._dragState = { sceneId: scene.sceneId, sourceFolder: folder };
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        if (e.dataTransfer.setData) e.dataTransfer.setData('text/plain', scene.sceneId);
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        this._dragState = { sceneId: null, sourceFolder: '' };
+        document.querySelectorAll('.scene-dd-folder-header').forEach(h => h.classList.remove('drag-over'));
+      });
+
+      // Drop to reorder within same folder
+      item.addEventListener('dragover', (e) => {
+        if (!this._dragState.sceneId || this._dragState.sourceFolder !== folder) return;
+        e.preventDefault();
+        item.classList.add('drag-target');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-target'));
+      item.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        item.classList.remove('drag-target');
+        const { sceneId, sourceFolder } = this._dragState;
+        if (!sceneId || sourceFolder !== folder) return;
+        await this._reorderScene(sceneId, scene.sceneId, folder);
+      });
+
+      list.appendChild(item);
     });
+
+    container.appendChild(list);
+  }
+
+  _startRenameScene(scene, itemEl, nameWrapper) {
+    nameWrapper.innerHTML = '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'scene-dd-rename-input';
+    input.value = scene.sceneName;
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await this._finishRenameScene(scene, input.value.trim());
+      } else if (e.key === 'Escape') {
+        this._renderDropdownMenu();
+      }
+    });
+    input.addEventListener('blur', async () => {
+      await this._finishRenameScene(scene, input.value.trim());
+    });
+    nameWrapper.appendChild(input);
+    input.focus();
+    input.select();
+  }
+
+  async _finishRenameScene(scene, newName) {
+    if (!newName || newName === scene.sceneName) {
+      this._renderDropdownMenu();
+      return;
+    }
+    const originalName = scene.sceneName;
+    scene.sceneName = newName;
+    this._renderDropdownMenu(); // optimistic
+    this._updateDropdownLabel();
+    this._renderPinnedButtons();
+    try {
+      const res = await fetch(`/api/scenes/${scene.sceneId}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneName: newName }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Rename failed');
+    } catch (err) {
+      console.error('Error renaming scene:', err);
+      scene.sceneName = originalName;
+      this._renderDropdownMenu();
+      this._updateDropdownLabel();
+      this._renderPinnedButtons();
+      alert('Failed to rename scene.');
+    }
+  }
+
+  async _setSceneFolder(sceneId, folder) {
+    const scene = this.allScenes.find(s => s.sceneId === sceneId);
+    if (!scene) return;
+    const oldFolder = scene.folder || '';
+    if (oldFolder === folder) return;
+    scene.folder = folder;
+    this._expandedFolders.add(folder);
+    this._renderDropdownMenu();
+    try {
+      const res = await fetch(`/api/scenes/${sceneId}/folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Move failed');
+    } catch (err) {
+      console.error('Error moving scene to folder:', err);
+      scene.folder = oldFolder;
+      this._renderDropdownMenu();
+      alert('Failed to move scene.');
+    }
+  }
+
+  async _reorderScene(draggedSceneId, targetSceneId, folder) {
+    if (draggedSceneId === targetSceneId) return;
+    const folderScenes = this.allScenes.filter(s => (s.folder || '') === folder);
+    const fromIndex = folderScenes.findIndex(s => s.sceneId === draggedSceneId);
+    const toIndex = folderScenes.findIndex(s => s.sceneId === targetSceneId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    // Move within the folder array
+    const [moved] = folderScenes.splice(fromIndex, 1);
+    folderScenes.splice(toIndex, 0, moved);
+
+    // Recompute global order: iterate folders in their sorted order, then scenes in folder order
+    const folderOrder = ['', ...this._folderList()];
+    let orderCounter = 0;
+    const folderMap = new Map();
+    this.allScenes.forEach(s => {
+      const f = s.folder || '';
+      if (!folderMap.has(f)) folderMap.set(f, []);
+      folderMap.get(f).push(s);
+    });
+
+    const newSceneOrder = [];
+    folderOrder.forEach(f => {
+      const scenesInFolder = folderMap.get(f) || [];
+      if (f === folder) {
+        // use reordered list for the affected folder
+        folderScenes.forEach(s => {
+          s.order = orderCounter;
+          newSceneOrder.push(s.sceneId);
+          orderCounter += 1;
+        });
+      } else {
+        scenesInFolder.forEach(s => {
+          s.order = orderCounter;
+          newSceneOrder.push(s.sceneId);
+          orderCounter += 1;
+        });
+      }
+    });
+
+    this._renderDropdownMenu();
+    this._renderPinnedButtons();
+    try {
+      const res = await fetch('/updateSceneOrder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneOrder: newSceneOrder }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Reorder failed');
+    } catch (err) {
+      console.error('Error reordering scenes:', err);
+      // Reload to reconcile
+      this.fetchSceneList();
+      alert('Failed to reorder scenes.');
+    }
+  }
+
+  _promptCreateFolder() {
+    const name = prompt('Enter new folder name:');
+    if (!name || !name.trim()) return;
+    this.createFolder(name.trim());
+  }
+
+  _promptRenameFolder(folder) {
+    const name = prompt('Rename folder:', folder);
+    if (!name || !name.trim() || name.trim() === folder) return;
+    this.renameFolder(folder, name.trim());
+  }
+
+  async createFolder(name) {
+    const clean = name.trim();
+    if (!clean) return;
+    if (this._folderList().includes(clean)) {
+      alert('A folder with that name already exists.');
+      return;
+    }
+    // Create folder by moving no scene is needed; folder exists once a scene has it.
+    // To make the folder visible immediately, create it as an empty collapsible group.
+    this._expandedFolders.add(clean);
+    this._renderDropdownMenu();
+  }
+
+  async renameFolder(oldName, newName) {
+    try {
+      const res = await fetch('/api/scenes/folders/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldName, newName }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Rename failed');
+      this.allScenes.forEach(s => {
+        if ((s.folder || '') === oldName) s.folder = newName;
+      });
+      if (this._expandedFolders.has(oldName)) {
+        this._expandedFolders.delete(oldName);
+        this._expandedFolders.add(newName);
+      }
+      this._renderDropdownMenu();
+    } catch (err) {
+      console.error('Error renaming folder:', err);
+      alert('Failed to rename folder.');
+    }
+  }
+
+  async _deleteFolder(folder) {
+    if (!confirm(`Delete folder "${folder}"? Its scenes will move to Root.`)) return;
+    try {
+      const res = await fetch('/api/scenes/folders/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: folder }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Delete failed');
+      this.allScenes.forEach(s => {
+        if ((s.folder || '') === folder) s.folder = '';
+      });
+      this._expandedFolders.delete(folder);
+      this._renderDropdownMenu();
+    } catch (err) {
+      console.error('Error deleting folder:', err);
+      alert('Failed to delete folder.');
+    }
+  }
+
+  fetchSceneFolders() {
+    fetch('/api/scenes/folders')
+      .then(res => res.ok ? res.json() : { folders: [] })
+      .then(data => {
+        this.sceneFolders = data.folders || [];
+      })
+      .catch(err => console.error('Error fetching scene folders:', err));
   }
 
   _updateDropdownLabel() {
@@ -359,7 +761,7 @@ export class SceneManager {
 
   // ── Scene backups UI ────────────────────────────────────────
   setupBackupsPanel() {
-    const btn = document.getElementById('backups-toggle-btn');
+    const btn = document.getElementById('backups-tray-btn') || document.getElementById('backups-toggle-btn');
     const panel = document.getElementById('backups-panel');
     if (!btn || !panel) return;
 

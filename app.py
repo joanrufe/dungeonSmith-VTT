@@ -317,12 +317,13 @@ class SceneStore:
         self.scenes[scene_id] = scene
         return scene
 
-    def save_scene(self, scene: SceneDict) -> None:
+    def save_scene(self, scene: SceneDict, count_save: bool = True) -> None:
         SCENES_DIR.mkdir(parents=True, exist_ok=True)
         self.path_for(scene["sceneId"]).write_text(
             json.dumps(scene, indent=2), encoding="utf-8"
         )
-        self._record_scene_save(scene["sceneId"])
+        if count_save:
+            self._record_scene_save(scene["sceneId"])
 
     def list_backups(self, scene_id: SceneId) -> List[Dict[str, Any]]:
         backups_dir = SCENES_DIR / "backups"
@@ -395,8 +396,9 @@ class SceneStore:
                 "sceneId": scene.get("sceneId"),
                 "sceneName": scene.get("sceneName"),
                 "order": scene.get("order", 0),
+                "folder": scene.get("folder", ""),
             })
-        scenes.sort(key=lambda item: item.get("order", 0))
+        scenes.sort(key=lambda item: (item.get("order", 0), item.get("sceneName", "")))
         return scenes
 
     def update_scene(self, scene: SceneDict) -> None:
@@ -418,7 +420,70 @@ class SceneStore:
         for index, scene_id in enumerate(scene_order):
             scene = self.load_scene(scene_id)
             scene["order"] = index
-            self.save_scene(scene)
+            self.save_scene(scene, count_save=False)
+
+    def rename_scene(self, scene_id: SceneId, scene_name: str) -> None:
+        scene = self.load_scene(scene_id)
+        scene["sceneName"] = scene_name
+        self.save_scene(scene, count_save=False)
+        if scene_id in self.scenes:
+            self.scenes[scene_id]["sceneName"] = scene_name
+
+    def set_scene_folder(self, scene_id: SceneId, folder: str) -> None:
+        folder = (folder or "").strip()
+        scene = self.load_scene(scene_id)
+        scene["folder"] = folder
+        self.save_scene(scene, count_save=False)
+        if scene_id in self.scenes:
+            self.scenes[scene_id]["folder"] = folder
+
+    def list_scene_folders(self) -> List[str]:
+        folders: set = set()
+        for path in SCENES_DIR.glob("*.json"):
+            try:
+                scene = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Skipping unreadable scene file %s: %s", path, exc)
+                continue
+            folder = scene.get("folder", "")
+            if folder:
+                folders.add(folder)
+        return sorted(folders)
+
+    def rename_scene_folder(self, old_name: str, new_name: str) -> None:
+        old_name = (old_name or "").strip()
+        new_name = (new_name or "").strip()
+        if not old_name or not new_name or old_name == new_name:
+            return
+        for path in SCENES_DIR.glob("*.json"):
+            try:
+                scene = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Skipping unreadable scene file while renaming folder: %s", exc)
+                continue
+            if scene.get("folder", "") == old_name:
+                scene["folder"] = new_name
+                path.write_text(json.dumps(scene, indent=2), encoding="utf-8")
+                sid = scene.get("sceneId")
+                if sid in self.scenes:
+                    self.scenes[sid]["folder"] = new_name
+
+    def delete_scene_folder(self, name: str) -> None:
+        name = (name or "").strip()
+        if not name:
+            return
+        for path in SCENES_DIR.glob("*.json"):
+            try:
+                scene = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Skipping unreadable scene file while deleting folder: %s", exc)
+                continue
+            if scene.get("folder", "") == name:
+                scene["folder"] = ""
+                path.write_text(json.dumps(scene, indent=2), encoding="utf-8")
+                sid = scene.get("sceneId")
+                if sid in self.scenes:
+                    self.scenes[sid]["folder"] = ""
 
     def is_image_used_elsewhere(self, image_url: Optional[str]) -> bool:
         if not image_url:
@@ -757,8 +822,14 @@ def create_scene() -> RouteReturn:
         return redirect("/dm-login")
     data = json_body()
     scene_id = now_ms()
-    scene = {"sceneId": scene_id, "sceneName": data.get("sceneName"), "tokens": []}
-    scene_store.save_scene(scene)
+    scene = {
+        "sceneId": scene_id,
+        "sceneName": data.get("sceneName"),
+        "tokens": [],
+        "folder": "",
+        "order": len(scene_store.get_all_scenes()),
+    }
+    scene_store.save_scene(scene, count_save=False)
     scene_store.add_scene(scene)
     return jsonify({"sceneId": scene_id})
 
@@ -803,7 +874,9 @@ def duplicate_scene() -> RouteReturn:
         new_scene_id = now_ms()
         new_scene["sceneId"] = new_scene_id
         new_scene["sceneName"] = data.get("sceneName") or f"Copy of {source.get('sceneName')}"
-        scene_store.save_scene(new_scene)
+        new_scene["folder"] = ""
+        new_scene["order"] = len(scene_store.get_all_scenes())
+        scene_store.save_scene(new_scene, count_save=False)
         scene_store.add_scene(new_scene)
         return jsonify({"sceneId": new_scene_id})
     except Exception:
@@ -819,6 +892,76 @@ def update_scene_order() -> RouteReturn:
         return jsonify({"success": True})
     except Exception:
         return jsonify({"success": False, "message": "Failed to update scene order"})
+
+
+@app.post("/api/scenes/<sceneId>/rename")
+def rename_scene_name(sceneId: SceneId) -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    try:
+        scene_name = str(json_body().get("sceneName") or "").strip()
+        if not scene_name:
+            return jsonify({"success": False, "message": "Scene name is required"}), 400
+        scene_store.rename_scene(sceneId, scene_name)
+        return jsonify({"success": True})
+    except Exception as exc:
+        logger.exception("Failed to rename scene %s", sceneId)
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.post("/api/scenes/<sceneId>/folder")
+def set_scene_folder_endpoint(sceneId: SceneId) -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    try:
+        folder = str(json_body().get("folder") or "").strip()
+        scene_store.set_scene_folder(sceneId, folder)
+        return jsonify({"success": True})
+    except Exception as exc:
+        logger.exception("Failed to set folder for scene %s", sceneId)
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.get("/api/scenes/folders")
+def list_scene_folders_endpoint() -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    try:
+        return jsonify({"folders": scene_store.list_scene_folders()})
+    except Exception:
+        return jsonify({"folders": []}), 500
+
+
+@app.post("/api/scenes/folders/rename")
+def rename_scene_folder_endpoint() -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    try:
+        data = json_body()
+        old_name = str(data.get("oldName") or "").strip()
+        new_name = str(data.get("newName") or "").strip()
+        if not old_name or not new_name:
+            return jsonify({"success": False, "message": "Both old and new folder names are required"}), 400
+        scene_store.rename_scene_folder(old_name, new_name)
+        return jsonify({"success": True})
+    except Exception as exc:
+        logger.exception("Failed to rename scene folder")
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.post("/api/scenes/folders/delete")
+def delete_scene_folder_endpoint() -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    try:
+        name = str(json_body().get("name") or "").strip()
+        if not name:
+            return jsonify({"success": False, "message": "Folder name is required"}), 400
+        scene_store.delete_scene_folder(name)
+        return jsonify({"success": True})
+    except Exception as exc:
+        logger.exception("Failed to delete scene folder")
+        return jsonify({"success": False, "message": str(exc)}), 500
 
 
 @app.get("/api/scenes/<sceneId>/backups")
