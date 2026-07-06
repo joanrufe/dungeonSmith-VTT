@@ -610,6 +610,7 @@ export class SceneManager {
       }
     });
 
+    this.allScenes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     this._renderDropdownMenu();
     this._renderPinnedButtons();
     try {
