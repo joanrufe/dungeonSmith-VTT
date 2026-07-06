@@ -1,7 +1,7 @@
 # Apply Progress — Polygon Walls & Simplified Vision
 
 ## Goal
-Refactor the fog-of-war wall system in SceneSmith-VTT from "open line segments"
+Refactor the fog-of-war wall system in DungeonSmith-VTT from "open line segments"
 to "closed polygons" so that:
 - a wall is always a closed shape (the user's bug: a single line segment was
   acting like an infinite blocker);

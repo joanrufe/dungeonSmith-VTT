@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dev launcher for SceneSmith-VTT (Ubuntu / Linux).
+# Dev launcher for DungeonSmith-VTT (Ubuntu / Linux).
 # Equivalent of the Windows .bat files — but the Windows ones automate the exact
 # same steps: create venv, install deps, run app.py.
 #
@@ -26,7 +26,7 @@ echo ">> Installing dependencies ..."
 .venv/bin/pip install --quiet -r requirements.txt
 
 # 3. Launch app.py with the chosen port
-echo ">> Starting SceneSmith-VTT on port ${PORT}"
+echo ">> Starting DungeonSmith-VTT on port ${PORT}"
 echo "   Local: http://127.0.0.1:${PORT}"
 echo "   DM password: DMCODE   |   Player password: PLAY"
 echo "   Ctrl+C to stop."

@@ -1,13 +1,13 @@
 @echo off
 setlocal
-title SceneSmith VTT
+title DungeonSmith VTT
 cd /d "%~dp0"
 
 set "VTT_PORT=3000"
 set "PYTHON_CMD=py -3"
 
 echo.
-echo  Starting SceneSmith VTT Server...
+echo  Starting DungeonSmith VTT Server...
 echo  Project folder: %CD%
 echo.
 

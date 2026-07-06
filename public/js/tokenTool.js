@@ -193,6 +193,7 @@
       const fontSize = parseInt(document.getElementById('tsp-cond-size').value) || 22;
       const radiusCells = parseFloat(document.getElementById('tsp-vision-radius').value);
       const isMap    = document.getElementById('tsp-is-map').checked;
+      const visibleToPlayers = document.getElementById('tsp-visible-to-players').checked;
       const gridSize = window.VTT_GRID_SIZE || 60;
 
       token.hpCurrent        = isNaN(cur) ? null : cur;
@@ -202,6 +203,7 @@
       token.conditionFontSize = cond ? fontSize : null;
       token.visionRadius     = isNaN(radiusCells) ? 0 : Math.max(0, radiusCells) * gridSize;
       token.isMap            = isMap;
+      token.visibleToPlayers = visibleToPlayers;
 
       /** @type {Record<string,any>} */
       const properties = {
@@ -212,6 +214,7 @@
         conditionFontSize: token.conditionFontSize,
         visionRadius:    token.visionRadius,
         isMap:           token.isMap,
+        visibleToPlayers: token.visibleToPlayers,
       };
 
       // When marking as a map token, lock it and send it to the background
@@ -268,6 +271,7 @@
     const radiusCells = token.visionRadius ? token.visionRadius / gridSize : 0;
     document.getElementById('tsp-vision-radius').value = radiusCells || '';
     document.getElementById('tsp-is-map').checked = !!token.isMap;
+    document.getElementById('tsp-visible-to-players').checked = token.visibleToPlayers !== false;
 
     const popup = document.getElementById('token-status-popup');
     popup.style.display = 'block';

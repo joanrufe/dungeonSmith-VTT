@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>SceneSmith - DM</title>
+  <title>DungeonSmith - DM</title>
   <link rel="stylesheet" href="/css/styles.css?v=scenesmith-clean-1">
   <link rel="stylesheet" href="/css/dm.css?v=scenesmith-clean-1">
   <link rel="stylesheet" href="/css/theme.css?v=scenesmith-clean-1">
@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/png" href="./SceneSmith.png">
+  <link rel="icon" type="image/png" href="./DungeonSmith.png">
 </head>
 
 <body>
@@ -350,7 +350,7 @@
 
   <div id="scene-container">
     <div id="no-scene-msg" class="no-scene-msg">
-      <img src="./SceneSmith.png" class="no-scene-logo" alt="SceneSmith VTT">
+      <img src="./DungeonSmith.png" class="no-scene-logo" alt="DungeonSmith VTT">
       <div class="no-scene-label">Pick a Scene</div>
     </div>
   </div>
@@ -386,6 +386,10 @@
       <label>Map</label>
       <input type="checkbox" id="tsp-is-map" title="Mark as background map token (locks token, sends to background)">
       <span style="font-size:11px;opacity:0.7;margin-left:4px;">Background map</span>
+    </div>
+    <div class="tsp-row">
+      <label for="tsp-visible-to-players">Visible to players</label>
+      <input type="checkbox" id="tsp-visible-to-players" checked>
     </div>
     <div class="tsp-btns">
       <button id="tsp-apply">Apply</button>

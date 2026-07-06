@@ -1,14 +1,14 @@
 @echo off
 setlocal
-title Build SceneSmith VTT
+title Build DungeonSmith VTT
 cd /d "%~dp0"
 
 set "BUILD_ROOT=dist"
-set "BUILD_DIR=%BUILD_ROOT%\SceneSmithVTT"
+set "BUILD_DIR=%BUILD_ROOT%\DungeonSmithVTT"
 set "PYTHON_CMD=py -3"
 
 echo.
-echo  Building SceneSmith VTT Python runtime...
+echo  Building DungeonSmith VTT Python runtime...
 echo  Project folder: %CD%
 echo.
 

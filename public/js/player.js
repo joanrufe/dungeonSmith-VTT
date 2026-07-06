@@ -92,7 +92,7 @@ socket.on('fogOpacity', ({ sceneId, fogOpacity }) => {
 function renderScene(scene) {
   sceneRenderer.renderScene(scene);
   scene.tokens
-    .filter(t => !t.hidden)
+    .filter(t => !t.hidden && t.visibleToPlayers !== false)
     .forEach(token => tokenManager.setupTokenInteractions(token));
 }
 
@@ -114,12 +114,12 @@ socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
     sceneRenderer.drawFog();
 
     // Only re-setup interactions when interaction-relevant props change
-    if ('movableByPlayers' in properties || 'hidden' in properties) {
+    if ('movableByPlayers' in properties || 'hidden' in properties || 'visibleToPlayers' in properties) {
       tokenManager.setupTokenInteractions(token);
     }
   } else {
     // Token might have been unhidden
-    if (!properties.hidden) {
+    if (!properties.hidden && properties.visibleToPlayers !== false) {
       // Add the token to the scene
       token = { tokenId, sceneId, ...properties };
       currentScene.tokens.push(token);
@@ -139,6 +139,7 @@ socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
 // Handle addition of new tokens
 socket.on('addToken', ({ sceneId, token }) => {
   if (!currentScene || currentScene.sceneId !== sceneId) return;
+  if (token.hidden || token.visibleToPlayers === false) return;
 
   // Add the new token to the scene's token list
   currentScene.tokens.push(token);
