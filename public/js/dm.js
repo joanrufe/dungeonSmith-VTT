@@ -6,6 +6,7 @@ import { SceneRenderer } from './sceneRenderer.js';
 import { PanZoomHandler } from './panZoomHandler.js';
 import { TokenManager } from './tokenManager.js';
 import { RotationOverlay } from './rotationOverlay.js';
+import { CampaignManager } from './campaignManager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const socket = io({ query: { role: 'dm' } });
@@ -21,8 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Expose to non-module scripts (paint mode, initiative tracker)
   window.VTT_DM = { socket, sceneManager };
 
-  // Instantiate MusicManager
+  // Instantiate managers
   const musicManager = new MusicManager(socket);
+  const campaignManager = new CampaignManager();
 
   // Handle scene creation
   document.getElementById('create-scene-button').addEventListener('click', () => {

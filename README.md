@@ -207,14 +207,105 @@ For both:
 
 ---
 
+## Campaigns
+
+DungeonSmith VTT keeps each campaign's scenes, backups, sticky notes, and uploaded media in an isolated directory tree under `campaigns/{name}/`. Only one campaign is active per server process; switch campaigns by restarting with a different selection.
+
+### Selecting a campaign
+
+The active campaign is resolved at startup, in this order:
+
+1. `--campaign` command-line argument (highest priority)
+2. `VTT_CAMPAIGN` environment variable
+3. The first non-empty line of a `.campaign` file in the project root
+4. The default campaign name `"Sola en la oscuridad"` (lowest priority)
+
+Examples:
+
+```sh
+# Use a project-root marker file
+echo "Curse-of-Strahd" > .campaign
+python app.py
+
+# Override with an environment variable
+VTT_CAMPAIGN=Waterdeep python app.py
+
+# Override everything with a CLI flag
+python app.py --campaign Tomb-of-Annihilation
+```
+
+Campaign names cannot be empty, whitespace-only, or contain path separators (`/`, `\`), `..`, or leading dots.
+
+### Campaign selector (DM toolbar)
+
+While the server is running, the DM can open the **Campaign** dropdown in the DM toolbar to:
+
+- See every campaign discovered from `campaigns/*/{name}.campaign` metadata files.
+- See the currently active campaign highlighted.
+- Create a new campaign with an optional description.
+- Switch to a different campaign.
+
+Switching campaigns writes the chosen name to the root `.campaign` marker and shows a restart-required overlay. The server keeps running the previous campaign until it is restarted; on the next launch the marker selects the new campaign.
+
+### Campaign metadata files
+
+Each campaign folder contains a JSON metadata file named `{name}.campaign`:
+
+```json
+{
+  "name": "Curse of Strahd",
+  "description": "Gothic horror campaign in Barovia",
+  "createdAt": "2026-07-06T18:00:00+00:00"
+}
+```
+
+The file is created automatically when a campaign is created through the UI or at first launch. Only campaigns with a `.campaign` metadata file appear in the selector; the active campaign is always repaired on startup if its metadata is missing.
+
+### Migrating existing flat data
+
+If you already have data from an earlier DungeonSmith version, the first launch with the default campaign `"Sola en la oscuridad"` automatically moves your existing runtime state into `campaigns/Sola en la oscuridad/`:
+
+- `data/scenes/` → `campaigns/Sola en la oscuridad/data/scenes/`
+- `data/sticky-notes.json` → `campaigns/Sola en la oscuridad/data/sticky-notes.json`
+- `data/scenes-backup-state.json` → `campaigns/Sola en la oscuridad/data/scenes-backup-state.json`
+- `public/uploads/`, `public/media/`, `public/music/`, `public/player-media/` → `campaigns/Sola en la oscuridad/public/...`
+
+Before anything is moved, the migration copies the legacy runtime data into timestamped backup directories (`data/.migration-backup-<timestamp>/` and `public/.migration-backup-<timestamp>/`). The originals are only removed after the campaign copy is verified. If a copy step fails, the original files are left untouched.
+
+> **Forced default campaign:** If legacy flat data is detected and the default campaign folder does not exist yet, `--campaign`, `VTT_CAMPAIGN`, and the `.campaign` marker are **ignored** for that launch. The server forces the default campaign so your existing data is migrated safely and exactly once. The `.campaign` marker is updated to the default name. After this launch, select any other campaign normally.
+
+UI assets (`public/js/`, `public/css/`, `public/lib/`, HTML files) and passwords (`data/private/secrets.txt`) are **not** moved and remain global. Back up `data/` and `public/` before the first migrated launch if you want to be extra safe.
+
+### Creating a new campaign
+
+Launching with a campaign name that does not exist will create an empty campaign tree automatically:
+
+```sh
+python app.py --campaign Rime-of-the-Frostmaiden
+```
+
+This creates `campaigns/Rime-of-the-Frostmaiden/data/scenes/` and the `public/{uploads,media,music,player-media}/` directories.
+
+---
+
 ## Project Structure
 
 ```txt
 .
 ├── app.py
 ├── requirements.txt
+├── campaigns/
+│   └── Sola en la oscuridad/
+│       ├── data/
+│       │   └── scenes/
+│       └── public/
+│           ├── media/
+│           ├── music/
+│           ├── uploads/
+│           └── player-media/
 ├── data/
-│   └── scenes/
+│   └── private/
+│       └── secrets.txt
 ├── public/
 │   ├── css/
 │   ├── js/
@@ -232,16 +323,20 @@ For both:
 ├── runEmbedded.bat
 ├── runVirtualEnv.bat
 ├── run_dev.sh
-└── data/private/secrets.txt
+└── .campaign
 ```
 
 Runtime/user data folders are ignored by git:
 
-- `public/media/`
-- `public/music/`
-- `public/uploads/`
-- `data/scenes/`
+- `campaigns/*/data/scenes/`
+- `campaigns/*/public/media/`
+- `campaigns/*/public/music/`
+- `campaigns/*/public/uploads/`
+- `campaigns/*/public/player-media/`
 - `data/private/`
+- `.campaign` (root marker for the last selected campaign)
+
+Legacy flat folders (`data/scenes/`, `public/media/`, etc.) are also ignored in case you are migrating from an older version.
 
 ---
 

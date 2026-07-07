@@ -37,3 +37,12 @@ public/player-media/**
 
 # Runtime data files
 data/sticky-notes.json
+data/scenes-backup-state.json
+
+# Campaign-scoped runtime trees (keep .gitkeep skeletons)
+campaigns/**
+!campaigns/
+!campaigns/**/.gitkeep
+
+# Root campaign selection marker
+.campaign

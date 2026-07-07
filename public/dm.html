@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
+  <meta name="active-campaign" content="{{CAMPAIGN_ACTIVE}}">
   <title>DungeonSmith - DM</title>
   <link rel="stylesheet" href="/css/styles.css?v=scenesmith-clean-1">
   <link rel="stylesheet" href="/css/dm.css?v=scenesmith-clean-1">
@@ -36,6 +37,15 @@
       <div id="scene-dropdown-menu" class="hidden"></div>
     </div>
     <div id="pinned-scenes-container" style="display:flex;align-items:center;gap:4px;"></div>
+
+    <!-- Campaign selector -->
+    <div style="height:20px;width:1px;background:#555;margin-right:10px;"></div>
+    <div id="campaign-dropdown-wrap" style="position:relative;">
+      <button id="campaign-dropdown-btn" class="toolbar-panel-btn" title="Campaigns">
+        <i class="fa-solid fa-book-open" style="margin-right:4px;opacity:0.7;"></i><span id="campaign-dropdown-label">{{CAMPAIGN_ACTIVE}}</span>&nbsp;<i class="fa-solid fa-caret-down"></i>
+      </button>
+      <div id="campaign-dropdown-menu" class="hidden"></div>
+    </div>
 
     <!-- Right-side toolbar controls -->
     <div id="toolbar-right">
@@ -364,6 +374,15 @@
   </div>
 
   <div id="dice-box-container"></div>
+
+  <!-- Campaign switch restart overlay -->
+  <div id="campaign-restart-overlay" class="hidden">
+    <div class="campaign-restart-content">
+      <h2><i class="fa-solid fa-power-off"></i> Restart Required</h2>
+      <p>Campaign switched to <strong class="campaign-restart-name"></strong>.</p>
+      <p>Restart the server to load this campaign.</p>
+    </div>
+  </div>
 
   <!-- Flourish overlay -->
   <div id="player-flourish" class="hidden">
