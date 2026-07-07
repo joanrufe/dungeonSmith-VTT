@@ -21,12 +21,13 @@
       this.btn = null;
       this.sceneContainer = null;
 
-      this.mode = 'none'; // 'draw' | 'erase' | 'none'
+      this.mode = 'select'; // 'select' | 'draw' | 'erase' | 'none'
       this.snapToGrid = false;
 
       this.selectedWallId = null;
       this.dragging = false;
       this.dragCurrentScreen = null;
+      this.dragStartScreen = null;
 
       // In-progress polygon drawing state
       this.inProgress = null;     // { points: [{x,y}, ...] }
@@ -59,13 +60,15 @@
 
     // ── UI bindings ─────────────────────────────────────────
     bindPanel() {
+      const selectBtn = document.getElementById('walls-select-btn');
       const drawBtn = document.getElementById('walls-draw-btn');
       const eraseBtn = document.getElementById('walls-erase-btn');
       const clearBtn = document.getElementById('walls-clear-btn');
       const snapToggle = document.getElementById('walls-snap-toggle');
 
-      drawBtn?.addEventListener('click', () => this.setMode(this.mode === 'draw' ? 'none' : 'draw'));
-      eraseBtn?.addEventListener('click', () => this.setMode(this.mode === 'erase' ? 'none' : 'erase'));
+      selectBtn?.addEventListener('click', () => this.setMode('select'));
+      drawBtn?.addEventListener('click', () => this.setMode(this.mode === 'draw' ? 'select' : 'draw'));
+      eraseBtn?.addEventListener('click', () => this.setMode(this.mode === 'erase' ? 'select' : 'erase'));
       snapToggle?.addEventListener('change', (e) => { this.snapToGrid = e.target.checked; });
 
       clearBtn?.addEventListener('click', () => {
@@ -136,8 +139,10 @@
       this.cancelPolygon();
       this.removePreview();
 
+      const selectBtn = document.getElementById('walls-select-btn');
       const drawBtn = document.getElementById('walls-draw-btn');
       const eraseBtn = document.getElementById('walls-erase-btn');
+      selectBtn?.classList.toggle('active-tool-btn', mode === 'select');
       drawBtn?.classList.toggle('active-tool-btn', mode === 'draw');
       eraseBtn?.classList.toggle('active-tool-btn', mode === 'erase');
     }
@@ -203,12 +208,14 @@
         return;
       }
 
-      // Default: select a wall for editing
+      // Select / move mode
       const wall = this.pickWallNear(sx, sy);
       if (wall) {
         this.selectedWallId = wall.wallId;
         this.dragging = true;
         this.dragCurrentScreen = { sx, sy };
+        this.dragStartScreen = { sx, sy };
+        this._lastDragScreen = { sx, sy };
         this.updateSelectionOverlay();
         e.preventDefault();
         return;
@@ -230,13 +237,13 @@
         return;
       }
 
-      if (this.selectedWallId) {
+      if (this.selectedWallId && this._lastDragScreen) {
         // Drag the whole polygon (vertices translated by the screen delta)
         const scene = this.currentScene();
         const wall = (scene?.walls || []).find(w => w.wallId === this.selectedWallId);
         if (!wall) return;
-        const dxScreen = sx - (this._lastDragScreen?.sx ?? sx);
-        const dyScreen = sy - (this._lastDragScreen?.sy ?? sy);
+        const dxScreen = sx - this._lastDragScreen.sx;
+        const dyScreen = sy - this._lastDragScreen.sy;
         this._lastDragScreen = { sx, sy };
         const r = this.renderer();
         const dxWorld = dxScreen / (r?.scale || 1);
@@ -252,12 +259,14 @@
 
     onMouseUp(e) {
       if (!this.isActive()) return;
-      this._lastDragScreen = null;
       if (!this.dragging) return;
 
       const scene = this.currentScene();
+      const moved = this.dragStartScreen && this.dragCurrentScreen &&
+        (Math.abs(this.dragCurrentScreen.sx - this.dragStartScreen.sx) > 0 ||
+         Math.abs(this.dragCurrentScreen.sy - this.dragStartScreen.sy) > 0);
 
-      if (this.selectedWallId && scene) {
+      if (this.selectedWallId && scene && moved) {
         const wall = (scene.walls || []).find(w => w.wallId === this.selectedWallId);
         if (wall) {
           this.socket().emit('updateWall', {
@@ -269,8 +278,8 @@
       }
 
       this.dragging = false;
-      this.dragStartWorld = null;
-      this.removeSelectionOverlay();
+      this.dragStartScreen = null;
+      this._lastDragScreen = null;
     }
 
     isNearFirstVertex(sx, sy) {
@@ -389,22 +398,50 @@
     }
 
     removeSelectionOverlay() {
-      // Selection state is held in currentScene; nothing to clear on the SVG.
+      const el = document.getElementById('wall-selection-overlay');
+      if (el) el.remove();
     }
 
     removePreview() {
       this.removeDrawPreview();
+      this.removeSelectionOverlay();
     }
 
     updateSelectionOverlay() {
-      // No persistent selection overlay for polygons (mousedown selection
-      // is held in `selectedWallId`); the renderer draws all walls.
+      if (!this.selectedWallId) {
+        this.removeSelectionOverlay();
+        return;
+      }
+      const scene = this.currentScene();
+      const wall = (scene?.walls || []).find(w => w.wallId === this.selectedWallId);
+      if (!wall || !wall.points || wall.points.length < 3) {
+        this.removeSelectionOverlay();
+        return;
+      }
+
+      const svg = this.ensureInteractionOverlay();
+      this.removeSelectionOverlay();
+
+      const pointsAttr = wall.points
+        .map(p => {
+          const sp = this.worldToScreen(p.x, p.y);
+          return `${sp.x},${sp.y}`;
+        })
+        .join(' ');
+
+      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polygon.id = 'wall-selection-overlay';
+      polygon.setAttribute('points', pointsAttr);
+      polygon.classList.add('wall-selection-overlay');
+      svg.appendChild(polygon);
     }
 
     clearSelection() {
       this.selectedWallId = null;
       this.dragging = false;
       this._lastDragScreen = null;
+      this.dragStartScreen = null;
+      this.removeSelectionOverlay();
     }
 
     // ── Hit testing ─────────────────────────────────────────
@@ -483,9 +520,16 @@
         if (this.inProgress) {
           this.cancelPolygon();
         } else {
-          this.setMode('none');
+          this.setMode('select');
           this.clearSelection();
         }
+        e.stopPropagation();
+        return;
+      }
+
+      if (e.key === 's' || e.key === 'S') {
+        this.setMode('select');
+        e.preventDefault();
         e.stopPropagation();
         return;
       }
