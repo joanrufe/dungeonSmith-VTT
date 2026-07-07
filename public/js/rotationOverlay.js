@@ -20,6 +20,13 @@ export class RotationOverlay {
     this.HANDLE_OFFSET = 24; // screen px beyond the rotated top edge
     this.MOVE_THRESHOLD = 3; // px; smaller movements are treated as a click
 
+    /** Whether the Shift key is currently held down. */
+    this._shiftKey = false;
+    this._boundKeyDown = this._onKeyDown.bind(this);
+    this._boundKeyUp = this._onKeyUp.bind(this);
+    window.addEventListener('keydown', this._boundKeyDown);
+    window.addEventListener('keyup', this._boundKeyUp);
+
     /**
      * Active drag state. When non-null the handle for this token is being dragged.
      * @type {{
@@ -84,7 +91,21 @@ export class RotationOverlay {
    * @returns {boolean}
    */
   _shouldShowHandle(ids, token) {
-    return ids.length === 1 && !token.locked && !!this.sceneManager?.isDM;
+    return ids.length === 1 && !token.locked && !!this.sceneManager?.isDM && this._shiftKey;
+  }
+
+  _onKeyDown(event) {
+    if (event.key === 'Shift' && !this._shiftKey) {
+      this._shiftKey = true;
+      this.sync(this.sceneManager?.selectedTokenIds);
+    }
+  }
+
+  _onKeyUp(event) {
+    if (event.key === 'Shift' && this._shiftKey) {
+      this._shiftKey = false;
+      this.sync(this.sceneManager?.selectedTokenIds);
+    }
   }
 
   /** @returns {import('./sceneRenderer.js').SceneRenderer} */

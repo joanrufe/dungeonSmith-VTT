@@ -1105,6 +1105,9 @@ export class SceneManager {
     if (moved && !this.isDM) {
       this.sceneRenderer.drawFog();
     }
+    if (moved && this.rotationOverlay) {
+      this.rotationOverlay.sync(this.selectedTokenIds);
+    }
   }
 
   clearSelection() {
