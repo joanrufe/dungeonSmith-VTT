@@ -384,6 +384,13 @@
     }
 
     document.getElementById('ae-spawn-btn')?.addEventListener('click', spawnEffect);
+    document.getElementById('ae-delete-btn')?.addEventListener('click', () => {
+      if (!selectedId) {
+        alert('No effect is selected. Click an effect first.');
+        return;
+      }
+      removeSelectedEffect();
+    });
   }
 
   function isTypingTarget(target) {
