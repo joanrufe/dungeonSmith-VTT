@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 import datetime
+import html
 import json
 import logging
 import mimetypes
@@ -8,8 +10,10 @@ import os
 import random
 import re
 import shutil
+import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, TypedDict
 
@@ -96,18 +100,18 @@ RouteReturn = Union[Response, str, Tuple[Any, int]]
 
 
 BASE_DIR = Path(__file__).resolve().parent
-PUBLIC_DIR = BASE_DIR / "public"
-DATA_DIR = BASE_DIR / "data"
-SCENES_DIR = DATA_DIR / "scenes"
-BACKUPS_DIR = SCENES_DIR / "backups"
-SECRET_DIR = DATA_DIR / "private"
+
+# UI static assets stay in the original public/ tree.
+UI_PUBLIC_DIR = BASE_DIR / "public"
+
+# Password storage stays global (not campaign-scoped).
+SECRET_DIR = BASE_DIR / "data" / "private"
 SECRET_FILE = SECRET_DIR / "secrets.txt"
 LEGACY_SECRET_FILE = BASE_DIR / "secret.txt"
-UPLOADS_DIR = PUBLIC_DIR / "uploads"
-MEDIA_DIR = PUBLIC_DIR / "media"
-PLAYER_MEDIA_DIR = PUBLIC_DIR / "player-media"
-MUSIC_DIR = PUBLIC_DIR / "music"
-NOTES_FILE = DATA_DIR / "sticky-notes.json"
+
+DEFAULT_CAMPAIGN_NAME = "Sola en la oscuridad"
+CAMPAIGNS_DIR = BASE_DIR / "campaigns"
+CAMPAIGN_MARKER_FILE = BASE_DIR / ".campaign"
 
 DEFAULT_SECRETS = {
     "DM_PASSWORD": "DMCODE",
@@ -124,6 +128,381 @@ TEXT_EXTS = {".txt", ".md", ".json", ".csv", ".log"}
 DOC_EXTS = PDF_EXTS | TEXT_EXTS
 MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS | DOC_EXTS
 MUSIC_EXTS = {".mp3", ".wav", ".ogg", ".m4a", ".flac"}
+
+
+@dataclass
+class CampaignPaths:
+    """All runtime I/O paths for a single campaign."""
+
+    root_dir: Path
+    data_dir: Path
+    scenes_dir: Path
+    backups_dir: Path
+    notes_file: Path
+    backup_state_file: Path
+    public_dir: Path
+    uploads_dir: Path
+    media_dir: Path
+    music_dir: Path
+    player_media_dir: Path
+    metadata_file: Path
+
+    @classmethod
+    def from_root(cls, root: Path) -> "CampaignPaths":
+        data = root / "data"
+        scenes = data / "scenes"
+        public = root / "public"
+        return cls(
+            root_dir=root,
+            data_dir=data,
+            scenes_dir=scenes,
+            backups_dir=scenes / "backups",
+            notes_file=data / "sticky-notes.json",
+            backup_state_file=data / "scenes-backup-state.json",
+            public_dir=public,
+            uploads_dir=public / "uploads",
+            media_dir=public / "media",
+            music_dir=public / "music",
+            player_media_dir=public / "player-media",
+            metadata_file=root / f"{root.name}.campaign",
+        )
+
+    def ensure_dirs(self) -> None:
+        for directory in (
+            self.scenes_dir,
+            self.uploads_dir,
+            self.media_dir,
+            self.music_dir,
+            self.player_media_dir,
+        ):
+            directory.mkdir(parents=True, exist_ok=True)
+
+
+campaign_paths: Optional[CampaignPaths] = None
+active_campaign_name: str = DEFAULT_CAMPAIGN_NAME
+
+
+def resolve_campaign_name(
+    cli: Optional[str] = None,
+    env: Optional[str] = None,
+    marker_path: Optional[Path] = None,
+) -> str:
+    """Resolve the active campaign name using CLI > env > marker > default."""
+    if cli is not None:
+        return cli.strip()
+    if env is not None and env.strip():
+        return env.strip()
+
+    marker = marker_path or CAMPAIGN_MARKER_FILE
+    if marker.exists():
+        for line in marker.read_text(encoding="utf-8").splitlines():
+            cleaned = line.strip()
+            if cleaned:
+                return cleaned
+    return DEFAULT_CAMPAIGN_NAME
+
+
+def is_valid_campaign_name(name: Optional[str]) -> bool:
+    """Reject empty, whitespace-only, or path-unsafe campaign names."""
+    if not isinstance(name, str):
+        return False
+    cleaned = name.strip()
+    if not cleaned:
+        return False
+    if cleaned in (".", ".."):
+        return False
+    if cleaned.startswith("."):
+        return False
+    if any(char in cleaned for char in ("/", "\\", "\0")):
+        return False
+    if ".." in cleaned:
+        return False
+    return True
+
+
+def validate_campaign_name(name: str) -> str:
+    if not is_valid_campaign_name(name):
+        raise ValueError(f"Invalid campaign name: {name!r}")
+    return name.strip()
+
+
+def ensure_campaign_metadata(
+    paths: CampaignPaths,
+    name: str,
+    description: str = "",
+) -> None:
+    """Write a metadata file for the campaign if it does not already exist."""
+    if paths.metadata_file.exists():
+        return
+    paths.root_dir.mkdir(parents=True, exist_ok=True)
+    paths.metadata_file.write_text(
+        json.dumps(
+            {
+                "name": name,
+                "description": description,
+                "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def discover_campaigns(campaigns_dir: Path = CAMPAIGNS_DIR) -> List[Dict[str, Any]]:
+    """Scan campaigns_dir for metadata files and return sorted campaign dicts."""
+    campaigns: List[Dict[str, Any]] = []
+    for path in campaigns_dir.glob("*/*.campaign"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Skipping unreadable campaign metadata %s: %s", path, exc)
+            continue
+        campaigns.append({
+            "name": data.get("name", path.stem),
+            "description": data.get("description", ""),
+            "createdAt": data.get("createdAt", ""),
+            "folder": path.parent.name,
+        })
+    campaigns.sort(key=lambda c: c["name"].lower())
+    return campaigns
+
+
+def create_campaign(name: str, description: str = "") -> CampaignPaths:
+    """Create a new campaign folder with metadata and runtime directories."""
+    validate_campaign_name(name)
+    paths = CampaignPaths.from_root(CAMPAIGNS_DIR / name)
+    paths.ensure_dirs()
+    ensure_campaign_metadata(paths, name, description)
+    return paths
+
+
+def write_campaign_marker(name: str, marker_path: Path = CAMPAIGN_MARKER_FILE) -> None:
+    """Write the active campaign name to the root marker file."""
+    marker_path.write_text(name + "\n", encoding="utf-8")
+
+
+def _copy_path(source: Path, target: Path) -> None:
+    """Copy a file or directory tree from source to target."""
+    if source.is_dir():
+        shutil.copytree(str(source), str(target))
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(source), str(target))
+
+
+def _verify_copy(source: Path, target: Path) -> bool:
+    """Verify that a copied file or directory tree exists at target."""
+    if not target.exists():
+        return False
+    if source.is_dir():
+        if not target.is_dir():
+            return False
+        for item in source.rglob("*"):
+            rel = item.relative_to(source)
+            target_item = target / rel
+            if item.is_dir():
+                if not target_item.is_dir():
+                    return False
+            else:
+                if not target_item.is_file():
+                    return False
+        return True
+    return target.is_file()
+
+
+def _remove_path(source: Path) -> None:
+    """Remove a file or directory tree."""
+    if source.is_dir():
+        shutil.rmtree(str(source))
+    else:
+        source.unlink()
+
+
+def migrate_legacy_runtime_data(
+    paths: CampaignPaths,
+    base_dir: Path = BASE_DIR,
+) -> None:
+    """
+    Move legacy flat runtime data into the campaign tree safely.
+
+    Only runtime state is moved: data/scenes/, data/sticky-notes.json,
+    data/scenes-backup-state.json, and public/{uploads,media,music,player-media}/.
+    UI assets, data/private/, and passwords stay untouched.
+
+    Safety behavior:
+    1. Create timestamped backup directories under data/ and public/.
+    2. Copy legacy runtime data into the backup first.
+    3. Copy legacy runtime data into the campaign tree.
+    4. Verify every expected destination exists.
+    5. Only then remove the original legacy files/directories.
+    6. If any step fails, the originals are left untouched.
+    """
+    legacy_data = base_dir / "data"
+    legacy_public = base_dir / "public"
+
+    moves: List[Tuple[Path, Path]] = [
+        (legacy_data / "scenes", paths.scenes_dir),
+        (legacy_data / "sticky-notes.json", paths.notes_file),
+        (legacy_data / "scenes-backup-state.json", paths.backup_state_file),
+        (legacy_public / "uploads", paths.uploads_dir),
+        (legacy_public / "media", paths.media_dir),
+        (legacy_public / "music", paths.music_dir),
+        (legacy_public / "player-media", paths.player_media_dir),
+    ]
+
+    paths.data_dir.mkdir(parents=True, exist_ok=True)
+    paths.public_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y%m%dT%H%M%S_%f"
+    )
+    backup_data_dir = legacy_data / f".migration-backup-{timestamp}"
+    backup_public_dir = legacy_public / f".migration-backup-{timestamp}"
+
+    planned: List[Tuple[Path, Path, Path]] = []
+    for source, target in moves:
+        if not source.exists():
+            continue
+        if target.exists():
+            logger.warning(
+                "Migration skipped %s because target %s already exists",
+                source,
+                target,
+            )
+            continue
+        try:
+            rel = source.relative_to(base_dir)
+        except ValueError:
+            rel = source.relative_to(legacy_data)
+        if str(rel).startswith("public"):
+            backup_target = backup_public_dir / Path(*rel.parts[1:])
+        else:
+            backup_target = backup_data_dir / Path(*rel.parts[1:])
+        planned.append((source, target, backup_target))
+
+    if not planned:
+        paths.ensure_dirs()
+        return
+
+    # 1. Create backups before touching the campaign tree or the originals.
+    try:
+        backup_data_dir.mkdir(parents=True, exist_ok=True)
+        backup_public_dir.mkdir(parents=True, exist_ok=True)
+        for source, _target, backup_target in planned:
+            _copy_path(source, backup_target)
+    except OSError as exc:
+        logger.error(
+            "Migration backup failed; aborting and leaving legacy data untouched: %s",
+            exc,
+        )
+        return
+
+    # 2. Copy to the campaign tree, verify, and only then remove the original.
+    any_migrated = False
+    for source, target, backup_target in planned:
+        try:
+            _copy_path(source, target)
+            if not _verify_copy(source, target):
+                raise OSError(f"Verification failed after copying {source} to {target}")
+        except OSError as exc:
+            logger.error(
+                "Failed to migrate %s to %s: %s; original left intact",
+                source,
+                target,
+                exc,
+            )
+            continue
+
+        try:
+            _remove_path(source)
+        except OSError as exc:
+            logger.error(
+                "Migrated %s -> %s but failed to remove the original: %s",
+                source,
+                target,
+                exc,
+            )
+            continue
+
+        any_migrated = True
+        logger.info(
+            "Migrated %s -> %s (backup: %s)",
+            source,
+            target,
+            backup_target,
+        )
+
+    # Always ensure the campaign runtime directories exist, even when there is
+    # no legacy data to migrate.
+    paths.ensure_dirs()
+
+    if any_migrated:
+        logger.info(
+            "Initial campaign '%s' created from existing flat runtime data",
+            paths.root_dir.name,
+        )
+
+
+def reset_runtime_state() -> None:
+    global bg_color, grid_state, initiative_state, socket_roles
+    bg_color = None
+    grid_state = None
+    initiative_state = None
+    socket_roles.clear()
+
+
+def initialize_runtime(campaign_name: str) -> None:
+    """Resolve paths and instantiate the in-memory store for a campaign."""
+    global campaign_paths, scene_store, history, active_campaign_name
+
+    default_root = CAMPAIGNS_DIR / DEFAULT_CAMPAIGN_NAME
+    legacy_scenes_dir = BASE_DIR / "data" / "scenes"
+    legacy_data_exists = (
+        legacy_scenes_dir.exists() and any(legacy_scenes_dir.iterdir())
+    )
+
+    # If legacy flat data still exists and the default campaign has not been
+    # created yet, force the default campaign so the existing data is migrated
+    # exactly once. This protects users who changed the marker before the first
+    # migrated launch from losing their scenes.
+    if legacy_data_exists and not default_root.exists():
+        requested_name = campaign_name
+        campaign_name = DEFAULT_CAMPAIGN_NAME
+        write_campaign_marker(campaign_name, marker_path=CAMPAIGN_MARKER_FILE)
+        logger.warning(
+            "OVERRIDE: --campaign / VTT_CAMPAIGN / .campaign selection %r is "
+            "overridden; legacy runtime data found and will be migrated into the "
+            "default campaign %r. Re-select the desired campaign after this launch.",
+            requested_name,
+            DEFAULT_CAMPAIGN_NAME,
+        )
+
+    active_campaign_name = campaign_name
+    campaign_root = CAMPAIGNS_DIR / campaign_name
+
+    if campaign_name == DEFAULT_CAMPAIGN_NAME and not campaign_root.exists():
+        campaign_paths = CampaignPaths.from_root(campaign_root)
+        migrate_legacy_runtime_data(campaign_paths, base_dir=BASE_DIR)
+    else:
+        campaign_paths = CampaignPaths.from_root(campaign_root)
+        campaign_paths.ensure_dirs()
+
+    ensure_campaign_metadata(campaign_paths, campaign_name)
+    reset_runtime_state()
+    scene_store = SceneStore(campaign_paths)
+    history = SceneHistory(scene_store)
+
+
+def initialize_for_test(root: Path) -> None:
+    """Lightweight test entrypoint that scopes all runtime data under root."""
+    global campaign_paths, scene_store, history, active_campaign_name
+    active_campaign_name = root.name
+    campaign_paths = CampaignPaths.from_root(root)
+    campaign_paths.ensure_dirs()
+    ensure_campaign_metadata(campaign_paths, root.name)
+    reset_runtime_state()
+    scene_store = SceneStore(campaign_paths)
+    history = SceneHistory(scene_store)
 
 
 def now_ms() -> str:
@@ -211,20 +590,21 @@ def get_media_type(name: str) -> Optional[str]:
 
 
 class SceneStore:
-    def __init__(self) -> None:
+    def __init__(self, paths: CampaignPaths) -> None:
+        self.paths = paths
         self.active_scene_id: Optional[SceneId] = None
         self.scenes: Dict[SceneId, SceneDict] = {}
         self._backup_lock = threading.Lock()
-        SCENES_DIR.mkdir(parents=True, exist_ok=True)
+        self.paths.scenes_dir.mkdir(parents=True, exist_ok=True)
 
     def _backup_state_file(self) -> Path:
-        return DATA_DIR / "scenes-backup-state.json"
+        return self.paths.backup_state_file
 
     def _backup_timestamp(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
 
     def _backup_path(self, scene_id: SceneId, timestamp: Optional[str] = None) -> Path:
-        return SCENES_DIR / "backups" / f"{scene_id}-{timestamp or self._backup_timestamp()}.json"
+        return self.paths.scenes_dir / "backups" / f"{scene_id}-{timestamp or self._backup_timestamp()}.json"
 
     def _load_save_counts(self) -> Dict[SceneId, int]:
         path = self._backup_state_file()
@@ -252,7 +632,7 @@ class SceneStore:
             logger.error("Failed to write backup state file %s: %s", path, exc)
 
     def _prune_old_backups(self) -> None:
-        backups_dir = SCENES_DIR / "backups"
+        backups_dir = self.paths.scenes_dir / "backups"
         if not backups_dir.exists():
             return
         backups = sorted(backups_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
@@ -269,7 +649,7 @@ class SceneStore:
                 logger.error("Failed to remove old backup %s: %s", oldest, exc)
 
     def _create_backup(self, scene_id: SceneId) -> Optional[Path]:
-        backups_dir = SCENES_DIR / "backups"
+        backups_dir = self.paths.scenes_dir / "backups"
         backups_dir.mkdir(parents=True, exist_ok=True)
         source = self.path_for(scene_id)
         if not source.exists():
@@ -295,7 +675,7 @@ class SceneStore:
             self._save_save_counts(counts)
 
     def path_for(self, scene_id: SceneId) -> Path:
-        return SCENES_DIR / f"{scene_id}.json"
+        return self.paths.scenes_dir / f"{scene_id}.json"
 
     def add_scene(self, scene: SceneDict) -> None:
         self.scenes[scene["sceneId"]] = scene
@@ -318,7 +698,7 @@ class SceneStore:
         return scene
 
     def save_scene(self, scene: SceneDict, count_save: bool = True) -> None:
-        SCENES_DIR.mkdir(parents=True, exist_ok=True)
+        self.paths.scenes_dir.mkdir(parents=True, exist_ok=True)
         self.path_for(scene["sceneId"]).write_text(
             json.dumps(scene, indent=2), encoding="utf-8"
         )
@@ -326,7 +706,7 @@ class SceneStore:
             self._record_scene_save(scene["sceneId"])
 
     def list_backups(self, scene_id: SceneId) -> List[Dict[str, Any]]:
-        backups_dir = SCENES_DIR / "backups"
+        backups_dir = self.paths.scenes_dir / "backups"
         entries: List[Dict[str, Any]] = []
         if not backups_dir.exists():
             return entries
@@ -346,7 +726,7 @@ class SceneStore:
         return entries
 
     def restore_backup(self, scene_id: SceneId, backup_id: str) -> None:
-        backups_dir = SCENES_DIR / "backups"
+        backups_dir = self.paths.scenes_dir / "backups"
         backup_path = backups_dir / f"{backup_id}.json"
         if not backup_path.exists():
             raise FileNotFoundError(f"Backup {backup_id} not found")
@@ -386,7 +766,7 @@ class SceneStore:
 
     def get_all_scenes(self) -> List[Dict[str, Any]]:
         scenes = []
-        for path in SCENES_DIR.glob("*.json"):
+        for path in self.paths.scenes_dir.glob("*.json"):
             try:
                 scene = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -439,7 +819,7 @@ class SceneStore:
 
     def list_scene_folders(self) -> List[str]:
         folders: set = set()
-        for path in SCENES_DIR.glob("*.json"):
+        for path in self.paths.scenes_dir.glob("*.json"):
             try:
                 scene = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -455,7 +835,7 @@ class SceneStore:
         new_name = (new_name or "").strip()
         if not old_name or not new_name or old_name == new_name:
             return
-        for path in SCENES_DIR.glob("*.json"):
+        for path in self.paths.scenes_dir.glob("*.json"):
             try:
                 scene = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -472,7 +852,7 @@ class SceneStore:
         name = (name or "").strip()
         if not name:
             return
-        for path in SCENES_DIR.glob("*.json"):
+        for path in self.paths.scenes_dir.glob("*.json"):
             try:
                 scene = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -488,7 +868,7 @@ class SceneStore:
     def is_image_used_elsewhere(self, image_url: Optional[str]) -> bool:
         if not image_url:
             return False
-        for path in SCENES_DIR.glob("*.json"):
+        for path in self.paths.scenes_dir.glob("*.json"):
             try:
                 scene = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -505,7 +885,7 @@ class SceneStore:
         if self.is_image_used_elsewhere(image_url):
             return
         rel = image_url.lstrip("/")
-        path = PUBLIC_DIR / rel
+        path = self.paths.public_dir / rel
         try:
             path.unlink()
         except OSError:
@@ -713,19 +1093,20 @@ class SceneHistory:
                 self._finalize_pending_locked(scene_id)
 
 
-scene_store = SceneStore()
-history = SceneHistory(scene_store)
-secrets = read_secrets()
+scene_store: Optional[SceneStore] = None
+history: Optional[SceneHistory] = None
 
-app = Flask(__name__, static_folder=str(PUBLIC_DIR), static_url_path="")
+app = Flask(__name__, static_folder=str(UI_PUBLIC_DIR), static_url_path="")
 app.secret_key = os.environ.get("SESSION_SECRET") or os.urandom(32)
-app.config["DM_PASSWORD"] = secrets.get("DM_PASSWORD") or DEFAULT_SECRETS["DM_PASSWORD"]
-app.config["PLAYER_PASSWORD"] = secrets.get("PLAYER_PASSWORD") or DEFAULT_SECRETS["PLAYER_PASSWORD"]
+# Passwords are configured after campaign resolution in main().
+app.config["DM_PASSWORD"] = DEFAULT_SECRETS["DM_PASSWORD"]
+app.config["PLAYER_PASSWORD"] = DEFAULT_SECRETS["PLAYER_PASSWORD"]
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
-bg_color = None
-grid_state = None
-initiative_state = None
+bg_color: Optional[str] = None
+grid_state: Optional[Any] = None
+initiative_state: Optional[Any] = None
+socket_roles: Dict[str, str] = {}
 
 
 def require_dm() -> bool:
@@ -764,12 +1145,12 @@ def cache_headers(response: Response) -> Response:
 def player_index() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
-    return send_from_directory(PUBLIC_DIR, "index.html")
+    return send_from_directory(UI_PUBLIC_DIR, "index.html")
 
 
 @app.get("/player-login")
 def player_login_page() -> RouteReturn:
-    return send_from_directory(PUBLIC_DIR, "player-login.html")
+    return send_from_directory(UI_PUBLIC_DIR, "player-login.html")
 
 
 @app.post("/player-login")
@@ -783,7 +1164,7 @@ def player_login() -> RouteReturn:
 
 @app.get("/dm-login")
 def dm_login_page() -> RouteReturn:
-    return send_from_directory(PUBLIC_DIR, "dm-login.html")
+    return send_from_directory(UI_PUBLIC_DIR, "dm-login.html")
 
 
 @app.post("/dm-login")
@@ -799,21 +1180,23 @@ def dm_login() -> RouteReturn:
 def dm_page() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
-    return send_from_directory(PUBLIC_DIR, "dm.html")
+    dm_html = (UI_PUBLIC_DIR / "dm.html").read_text(encoding="utf-8")
+    dm_html = dm_html.replace("{{CAMPAIGN_ACTIVE}}", html.escape(active_campaign_name))
+    return Response(dm_html, mimetype="text/html")
 
 
 @app.get("/dmadmin")
 def files_page() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
-    return send_from_directory(PUBLIC_DIR, "files.html")
+    return send_from_directory(UI_PUBLIC_DIR, "files.html")
 
 
 @app.get("/player-files")
 def player_files_page() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
-    return send_from_directory(PUBLIC_DIR, "player-files.html")
+    return send_from_directory(UI_PUBLIC_DIR, "player-files.html")
 
 
 @app.post("/createScene")
@@ -1001,9 +1384,9 @@ def upload_file() -> RouteReturn:
         media_type = "image"
     else:
         return "Unsupported file type.", 400
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    campaign_paths.uploads_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{now_ms()}-{secure_filename(file.filename)}"
-    file.save(UPLOADS_DIR / filename)
+    file.save(campaign_paths.uploads_dir / filename)
     return jsonify({"imageUrl": f"/uploads/{filename}", "mediaType": media_type})
 
 
@@ -1017,17 +1400,17 @@ def upload_music() -> RouteReturn:
     mime_type = file.mimetype or ""
     if not mime_type.startswith("audio/"):
         return jsonify({"success": False, "message": "Unsupported file type"}), 400
-    MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+    campaign_paths.music_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{now_ms()}-{secure_filename(file.filename)}"
-    file.save(MUSIC_DIR / filename)
+    file.save(campaign_paths.music_dir / filename)
     return jsonify({"success": True, "musicUrl": f"/music/{filename}", "filename": filename})
 
 
 @app.get("/musicList")
 def music_list() -> RouteReturn:
-    MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+    campaign_paths.music_dir.mkdir(parents=True, exist_ok=True)
     tracks = []
-    for path in MUSIC_DIR.iterdir():
+    for path in campaign_paths.music_dir.iterdir():
         if path.is_file() and path.suffix.lower() in MUSIC_EXTS:
             tracks.append({
                 "name": re.sub(r"^\d+\s*[-_]?\s*", "", path.name),
@@ -1044,7 +1427,7 @@ def delete_music() -> RouteReturn:
     filename = Path(json_body().get("filename") or "").name
     if not filename:
         return jsonify({"success": False, "message": "No filename provided."}), 400
-    path = MUSIC_DIR / filename
+    path = campaign_paths.music_dir / filename
     if not path.exists():
         return jsonify({"success": False, "message": "File not found."}), 404
     path.unlink()
@@ -1055,10 +1438,10 @@ def delete_music() -> RouteReturn:
 def media_list() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
-    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    campaign_paths.media_dir.mkdir(parents=True, exist_ok=True)
     folders = []
     root_files = []
-    for entry in MEDIA_DIR.iterdir():
+    for entry in campaign_paths.media_dir.iterdir():
         if entry.name.startswith("."):
             continue
         if entry.is_dir():
@@ -1082,7 +1465,7 @@ def media_folder_create() -> RouteReturn:
     name = safe_folder_name(json_body().get("name"))
     if not name:
         return jsonify({"error": "Invalid folder name"}), 400
-    (MEDIA_DIR / name).mkdir(parents=True, exist_ok=True)
+    (campaign_paths.media_dir / name).mkdir(parents=True, exist_ok=True)
     return jsonify({"ok": True})
 
 
@@ -1091,7 +1474,7 @@ def media_upload() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
     folder = safe_folder_name(request.args.get("folder"))
-    dest = MEDIA_DIR / folder if folder else MEDIA_DIR
+    dest = campaign_paths.media_dir / folder if folder else campaign_paths.media_dir
     dest.mkdir(parents=True, exist_ok=True)
     files = request.files.getlist("files")
     for file in files:
@@ -1113,10 +1496,10 @@ def media_upload() -> RouteReturn:
 def player_media_list() -> RouteReturn:
     if not require_player():
         return redirect("/player-login")
-    PLAYER_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    campaign_paths.player_media_dir.mkdir(parents=True, exist_ok=True)
     folders = []
     root_files = []
-    for entry in PLAYER_MEDIA_DIR.iterdir():
+    for entry in campaign_paths.player_media_dir.iterdir():
         if entry.name.startswith("."):
             continue
         if entry.is_dir():
@@ -1141,7 +1524,7 @@ def player_media_upload() -> RouteReturn:
     if provided != app.config["DM_PASSWORD"]:
         return jsonify({"error": "Invalid DM password."}), 403
     folder = safe_folder_name(request.args.get("folder"))
-    dest = PLAYER_MEDIA_DIR / folder if folder else PLAYER_MEDIA_DIR
+    dest = campaign_paths.player_media_dir / folder if folder else campaign_paths.player_media_dir
     dest.mkdir(parents=True, exist_ok=True)
     files = request.files.getlist("files")
     for file in files:
@@ -1169,7 +1552,7 @@ def player_media_folder_create() -> RouteReturn:
     name = safe_folder_name(json_body().get("name"))
     if not name:
         return jsonify({"error": "Invalid folder name"}), 400
-    (PLAYER_MEDIA_DIR / name).mkdir(parents=True, exist_ok=True)
+    (campaign_paths.player_media_dir / name).mkdir(parents=True, exist_ok=True)
     return jsonify({"ok": True})
 
 
@@ -1183,7 +1566,7 @@ def player_media_folder_delete() -> RouteReturn:
     name = safe_folder_name(json_body().get("name"))
     if not name:
         return jsonify({"error": "Invalid folder name"}), 400
-    shutil.rmtree(PLAYER_MEDIA_DIR / name, ignore_errors=True)
+    shutil.rmtree(campaign_paths.player_media_dir / name, ignore_errors=True)
     return jsonify({"ok": True})
 
 
@@ -1198,7 +1581,7 @@ def player_media_file_delete() -> RouteReturn:
     if not rel:
         return jsonify({"error": "Bad path"}), 400
     try:
-        (PLAYER_MEDIA_DIR / rel).unlink()
+        (campaign_paths.player_media_dir / rel).unlink()
     except OSError:
         return jsonify({"error": "File not found."}), 404
     return jsonify({"ok": True})
@@ -1211,7 +1594,7 @@ def media_folder_delete() -> RouteReturn:
     name = safe_folder_name(json_body().get("name"))
     if not name:
         return jsonify({"error": "Invalid folder name"}), 400
-    shutil.rmtree(MEDIA_DIR / name, ignore_errors=True)
+    shutil.rmtree(campaign_paths.media_dir / name, ignore_errors=True)
     return jsonify({"ok": True})
 
 
@@ -1224,7 +1607,7 @@ def media_folder_rename() -> RouteReturn:
     new_name = safe_folder_name(data.get("newName"))
     if not old_name or not new_name:
         return jsonify({"error": "Invalid folder name"}), 400
-    (MEDIA_DIR / old_name).rename(MEDIA_DIR / new_name)
+    (campaign_paths.media_dir / old_name).rename(campaign_paths.media_dir / new_name)
     return jsonify({"ok": True})
 
 
@@ -1235,7 +1618,7 @@ def media_file_delete() -> RouteReturn:
     rel = safe_relative_media_path(json_body().get("url"))
     if not rel:
         return jsonify({"error": "Bad path"}), 400
-    (MEDIA_DIR / rel).unlink()
+    (campaign_paths.media_dir / rel).unlink()
     return jsonify({"ok": True})
 
 
@@ -1271,10 +1654,10 @@ def passwords_put() -> RouteReturn:
 def sticky_notes_get() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not NOTES_FILE.exists():
-        NOTES_FILE.write_text("[]", encoding="utf-8")
-    return jsonify(json.loads(NOTES_FILE.read_text(encoding="utf-8")))
+    campaign_paths.data_dir.mkdir(parents=True, exist_ok=True)
+    if not campaign_paths.notes_file.exists():
+        campaign_paths.notes_file.write_text("[]", encoding="utf-8")
+    return jsonify(json.loads(campaign_paths.notes_file.read_text(encoding="utf-8")))
 
 
 @app.post("/sticky-notes")
@@ -1284,9 +1667,74 @@ def sticky_notes_post() -> RouteReturn:
     notes = request.get_json(silent=True)
     if not isinstance(notes, list):
         return jsonify({"error": "Expected array"}), 400
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    NOTES_FILE.write_text(json.dumps(notes), encoding="utf-8")
+    campaign_paths.data_dir.mkdir(parents=True, exist_ok=True)
+    campaign_paths.notes_file.write_text(json.dumps(notes), encoding="utf-8")
     return jsonify({"ok": True})
+
+
+# ── Campaign management endpoints ─────────────────────────────────────────────
+
+
+@app.get("/campaigns")
+def list_campaigns_endpoint() -> RouteReturn:
+    if not require_dm():
+        return jsonify({"error": "DM access required"}), 403
+    return jsonify({
+        "campaigns": discover_campaigns(CAMPAIGNS_DIR),
+        "active": active_campaign_name,
+    })
+
+
+@app.post("/campaigns")
+def create_campaign_endpoint() -> RouteReturn:
+    if not require_dm():
+        return jsonify({"error": "DM access required"}), 403
+    data = json_body()
+    name = str(data.get("name") or "").strip()
+    description = str(data.get("description") or "").strip()
+    if not is_valid_campaign_name(name):
+        return jsonify({"error": "Invalid campaign name"}), 400
+    metadata_path = CAMPAIGNS_DIR / name / f"{name}.campaign"
+    if metadata_path.exists():
+        return jsonify({"error": "Campaign already exists"}), 409
+    create_campaign(name, description)
+    return jsonify({"success": True, "name": name}), 201
+
+
+@app.post("/campaigns/switch")
+def switch_campaign_endpoint() -> RouteReturn:
+    if not require_dm():
+        return jsonify({"error": "DM access required"}), 403
+    name = str(json_body().get("name") or "").strip()
+    if not is_valid_campaign_name(name):
+        return jsonify({"error": "Invalid campaign name"}), 400
+    write_campaign_marker(name, CAMPAIGN_MARKER_FILE)
+    return jsonify({"success": True, "restartRequired": True})
+
+
+# ── Campaign-scoped static media routes ───────────────────────────────────────
+# UI assets continue to be served from the root public/ tree via Flask's
+# static handler. Runtime media is served from the active campaign directory.
+
+
+@app.get("/media/<path:filename>")
+def campaign_media_file(filename: str) -> RouteReturn:
+    return send_from_directory(campaign_paths.media_dir, filename)
+
+
+@app.get("/music/<path:filename>")
+def campaign_music_file(filename: str) -> RouteReturn:
+    return send_from_directory(campaign_paths.music_dir, filename)
+
+
+@app.get("/uploads/<path:filename>")
+def campaign_upload_file(filename: str) -> RouteReturn:
+    return send_from_directory(campaign_paths.uploads_dir, filename)
+
+
+@app.get("/player-media/<path:filename>")
+def campaign_player_media_file(filename: str) -> RouteReturn:
+    return send_from_directory(campaign_paths.player_media_dir, filename)
 
 
 def server_roll(raw_notation: str) -> Dict[str, str]:
@@ -1318,9 +1766,6 @@ def is_token_visible_to_players(token: Optional[Dict[str, Any]]) -> bool:
     if not token:
         return False
     return not token.get("hidden") and token.get("visibleToPlayers", True)
-
-
-socket_roles = {}
 
 
 @socketio.on("connect")
@@ -1678,10 +2123,34 @@ def socket_redo(data: Optional[Dict[str, Any]]) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="DungeonSmith VTT")
+    parser.add_argument(
+        "--campaign",
+        default=None,
+        help="Active campaign name (overrides VTT_CAMPAIGN and .campaign marker)",
+    )
+    args = parser.parse_args()
+
+    campaign_name = resolve_campaign_name(
+        cli=args.campaign,
+        env=os.environ.get("VTT_CAMPAIGN"),
+        marker_path=CAMPAIGN_MARKER_FILE,
+    )
+    if not is_valid_campaign_name(campaign_name):
+        logger.error("Invalid campaign name: %r", campaign_name)
+        sys.exit(1)
+
+    initialize_runtime(campaign_name)
+
+    secrets = read_secrets()
+    app.config["DM_PASSWORD"] = secrets.get("DM_PASSWORD") or DEFAULT_SECRETS["DM_PASSWORD"]
+    app.config["PLAYER_PASSWORD"] = secrets.get("PLAYER_PASSWORD") or DEFAULT_SECRETS["PLAYER_PASSWORD"]
+
     port = int(os.environ.get("VTT_PORT", "3000"))
     print(f"Passwords loaded from: {SECRET_FILE}")
     print(f"Project folder: {BASE_DIR}")
-    print(f"Public folder: {PUBLIC_DIR}")
+    print(f"Public folder: {UI_PUBLIC_DIR}")
+    print(f"Campaign: {campaign_name} ({campaign_paths.root_dir})")
     print(f"DM Password: {app.config['DM_PASSWORD']}")
     print(f"Player Password: {app.config['PLAYER_PASSWORD']}")
     socketio.run(app, host="0.0.0.0", port=port, allow_unsafe_werkzeug=True)

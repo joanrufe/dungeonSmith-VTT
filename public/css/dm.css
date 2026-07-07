@@ -155,8 +155,90 @@
 
 .scene-dd-pin:hover {
   color: #fff !important;
-  background: rgba(255,255,255,0.08) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
 }
+
+
+/* ── Campaign Selector ──────────────────────────────────── */
+#campaign-dropdown-menu.hidden { display: none; }
+
+#campaign-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  z-index: 600;
+  background: rgba(10,10,10,0.98);
+  border: 1px solid var(--ss-border);
+  min-width: 240px;
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+}
+
+#campaign-dropdown-btn { white-space: nowrap; }
+
+#campaign-dropdown-label {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.campaign-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+}
+
+.campaign-dd-item:hover { background: var(--ss-control-hover); }
+.campaign-dd-item.active { background: rgba(180,40,40,0.25); border-left: 3px solid var(--ss-red); cursor: default; }
+
+.campaign-dd-info { flex: 1; min-width: 0; }
+.campaign-dd-name { color: #ddd; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.campaign-dd-item.active .campaign-dd-name { color: #fff; font-weight: 600; }
+.campaign-dd-desc { color: var(--ss-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.campaign-dd-empty { padding: 12px; color: var(--ss-muted); font-size: 12px; text-align: center; }
+
+.campaign-dd-footer { padding: 8px; border-top: 1px solid rgba(255,255,255,0.08); }
+.campaign-dd-create {
+  width: 100%;
+  background: var(--ss-control);
+  border: 1px solid var(--ss-border);
+  color: #fff;
+  padding: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.campaign-dd-create:hover { background: var(--ss-control-hover); border-color: var(--ss-orange); }
+
+#campaign-restart-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#campaign-restart-overlay.hidden { display: none; }
+
+.campaign-restart-content {
+  background: rgba(10,10,10,0.98);
+  border: 1px solid var(--ss-orange);
+  padding: 24px 32px;
+  text-align: center;
+  max-width: 420px;
+}
+.campaign-restart-content h2 { color: var(--ss-orange); margin: 0 0 12px; font-size: 18px; }
+.campaign-restart-content p { color: #ddd; margin: 6px 0; font-size: 14px; }
+.campaign-restart-name { color: #fff; }
 
 
 /* ── Effects Panel ──────────────────────────────────────── */
