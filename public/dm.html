@@ -267,6 +267,7 @@
   <div id="walls-panel" class="draggable-panel panel-hidden">
     <div class="panel-drag-handle"><span><i class="fa-solid fa-vector-square"></i> Walls</span><span class="drag-hint">☰</span></div>
     <div class="walls-tool-row">
+      <button id="walls-select-btn" class="walls-mode-btn active-tool-btn" title="Select / move wall (S)"><i class="fa-solid fa-arrow-pointer"></i> Select</button>
       <button id="walls-draw-btn" class="walls-mode-btn" title="Draw wall (D)"><i class="fa-solid fa-pen"></i> Draw</button>
       <button id="walls-erase-btn" class="walls-mode-btn" title="Erase wall (E)"><i class="fa-solid fa-eraser"></i> Erase</button>
     </div>
@@ -276,7 +277,7 @@
       </label>
     </div>
     <button id="walls-clear-btn" class="walls-clear-btn"><i class="fa-solid fa-trash-can"></i> Clear All</button>
-    <p class="walls-hint">Click to add vertices. Click the first vertex (or double-click) to close. Esc cancels. Click polygon to move it. Delete removes selected.</p>
+    <p class="walls-hint"><strong>Select:</strong> click a wall and drag to move it.<br><strong>Draw:</strong> click vertices, close with first vertex or double-click.<br><strong>Erase:</strong> click a wall to remove it.<br><kbd>Del</kbd> deletes the selected wall.</p>
   </div>
 
   <!-- ═══ WAR FOG PANEL (floating pop-out) ═══ -->

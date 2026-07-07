@@ -727,6 +727,15 @@
   stroke-width: 2;
 }
 
+.wall-selection-overlay {
+  fill: rgba(255, 122, 24, 0.12);
+  stroke: var(--ss-orange);
+  stroke-width: 2.5;
+  stroke-dasharray: 6, 4;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
 /* DM-only indicator for tokens hidden from players (visibleToPlayers === false) */
 .token.token-hidden-from-players {
   filter: grayscale(70%);
