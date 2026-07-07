@@ -486,6 +486,37 @@ button:hover {
   border-color: #c62828 !important;
 }
 
+.ae-delete-btn {
+  width: 100%;
+  background: var(--ss-control) !important;
+  border: 1px solid var(--ss-border) !important;
+  color: #ccc !important;
+  padding: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.ae-delete-btn:hover {
+  background: #c62828 !important;
+  border-color: #c62828 !important;
+  color: #fff !important;
+}
+
+.ae-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ae-hint {
+  font-size: 10px;
+  color: var(--ss-dim);
+  text-align: center;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
 .player-area-effect {
   position: absolute;
   z-index: 2147483000;
