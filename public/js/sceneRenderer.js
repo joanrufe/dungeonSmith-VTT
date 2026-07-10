@@ -13,8 +13,32 @@ export class SceneRenderer {
     this.offsetX = 0;
     this.offsetY = 0;
     this.fogOpacity = 1.0;
+    /** @type {Set<string>} Token IDs whose conditions are expanded in player view. */
+    this._expandedConditionTokens = new Set();
     /** @type {(() => void) | null} Optional callback invoked after every updateAllTokenElements(). */
     this.onUpdateAll = null;
+  }
+
+  /**
+   * Ensure a token uses the new `conditions` array, migrating legacy single
+   * condition fields transparently when needed.
+   * @param {TokenDict} token
+   */
+  _normalizeTokenConditions(token) {
+    if (!token) return;
+    if (Array.isArray(token.conditions)) {
+      // Already normalized; ensure array shape is valid.
+      return;
+    }
+    const legacyText = token.conditionText != null ? String(token.conditionText).trim() : '';
+    if (legacyText) {
+      token.conditions = [{
+        text: legacyText,
+        color: token.conditionColor || '#ffffff',
+      }];
+    } else {
+      token.conditions = [];
+    }
   }
 
   /**
@@ -67,6 +91,7 @@ export class SceneRenderer {
    * @param {SceneDict} scene
    */
   renderScene(scene) {
+    this._expandedConditionTokens.clear();
     this.resetCamera();
     // Remember bg color then restore after the innerHTML wipe
     const savedBg = this._bgColor || '#000000';
@@ -189,32 +214,70 @@ export class SceneRenderer {
   }
 
   /**
+   * Render token condition information:
+   *  - DM and collapsed player view: small colored orbs around the token edge.
+   *  - Player view (expanded): nothing here; the player modal lists conditions.
+   * @param {TokenDict} token
+   */
+  _syncConditions(token) {
+    if (token.isPaintTile) return;
+    this._normalizeTokenConditions(token);
+
+    const conditions = token.conditions || [];
+    const hasConditions = conditions.length > 0;
+
+    const legacyLabel = document.getElementById(`cond-${token.tokenId}`);
+    const orbBox = document.getElementById(`cond-orbs-${token.tokenId}`);
+
+    if (!hasConditions || (!this.isDM && (token.hidden || token.visibleToPlayers === false))) {
+      if (legacyLabel) legacyLabel.remove();
+      if (orbBox) orbBox.remove();
+      return;
+    }
+
+    if (legacyLabel) legacyLabel.remove();
+
+    const expanded = !this.isDM && this._expandedConditionTokens.has(token.tokenId);
+    if (expanded) {
+      if (orbBox) orbBox.remove();
+      return;
+    }
+
+    let box = orbBox;
+    if (!box) {
+      box = document.createElement('div');
+      box.id = `cond-orbs-${token.tokenId}`;
+      box.className = 'token-condition-orb-container';
+      this.container.appendChild(box);
+    }
+
+    const ORB_SIZE = 12;
+    const PAD = 3;
+    const cx = (token.x + token.width / 2 + this.offsetX) * this.scale;
+    const cy = (token.y + token.height / 2 + this.offsetY) * this.scale;
+    const rx = (token.width * this.scale) / 2 + ORB_SIZE / 2 + PAD;
+    const ry = (token.height * this.scale) / 2 + ORB_SIZE / 2 + PAD;
+
+    box.innerHTML = '';
+    conditions.forEach((cond, i) => {
+      const angle = (i / conditions.length) * Math.PI * 2 - Math.PI / 2;
+      const orb = document.createElement('div');
+      orb.className = 'token-condition-orb';
+      orb.style.backgroundColor = cond.color || '#ffffff';
+      orb.style.left = `${cx + rx * Math.cos(angle)}px`;
+      orb.style.top = `${cy + ry * Math.sin(angle)}px`;
+      box.appendChild(orb);
+    });
+
+    box.style.opacity = (this.isDM && token.visibleToPlayers === false) ? '0.4' : (this.isDM && token.hidden) ? '0.5' : '1';
+  }
+
+  /**
+   * Backwards-compatible alias for any older callers.
    * @param {TokenDict} token
    */
   _syncConditionLabel(token) {
-    if (token.isPaintTile) return;
-    const BAR_H = 6, BAR_GAP = 3, LABEL_GAP = 2;
-    let label = document.getElementById(`cond-${token.tokenId}`);
-    const hasText = token.conditionText && token.conditionText.trim();
-    if (!hasText || (!this.isDM && (token.hidden || token.visibleToPlayers === false))) { if (label) label.remove(); return; }
-    if (!label) {
-      label = document.createElement('div');
-      label.id = `cond-${token.tokenId}`;
-      label.className = 'token-condition-label';
-      this.container.appendChild(label);
-    }
-    const baseFontSize  = token.conditionFontSize || 22;
-    const scaledFont    = Math.max(9, Math.round(baseFontSize * this.scale));
-    const labelH        = scaledFont + 2;
-    const totalOffset   = BAR_H + BAR_GAP + labelH + LABEL_GAP;
-    label.textContent        = token.conditionText;
-    label.style.color        = token.conditionColor || '#ffffff';
-    label.style.fontSize     = `${scaledFont}px`;
-    label.style.lineHeight   = `${labelH}px`;
-    label.style.left         = `${(token.x + this.offsetX) * this.scale}px`;
-    label.style.top          = `${(token.y + this.offsetY) * this.scale - totalOffset}px`;
-    label.style.width        = `${token.width * this.scale}px`;
-    label.style.opacity      = (this.isDM && token.visibleToPlayers === false) ? '0.4' : (this.isDM && token.hidden) ? '0.5' : '1';
+    this._syncConditions(token);
   }
 
   /**
@@ -274,7 +337,7 @@ export class SceneRenderer {
 
     this.container.appendChild(element);
     this._syncHpBar(token);
-    this._syncConditionLabel(token);
+    this._syncConditions(token);
 
     return element;
   }
@@ -328,7 +391,7 @@ export class SceneRenderer {
         this.container.removeChild(element);
       }
       this._syncHpBar(token);
-      this._syncConditionLabel(token);
+      this._syncConditions(token);
       return;
     }
 
@@ -361,7 +424,7 @@ export class SceneRenderer {
       // Optionally set up token interactions
     }
     this._syncHpBar(token);
-    this._syncConditionLabel(token);
+    this._syncConditions(token);
   }
 
   resetCamera() {
