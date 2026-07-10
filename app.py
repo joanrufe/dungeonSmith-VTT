@@ -55,6 +55,7 @@ class TokenDict(_TokenDictRequired, total=False):
     conditionText: Optional[str]
     conditionColor: Optional[str]
     conditionFontSize: Optional[int]
+    conditions: Optional[List[Dict[str, str]]]
     isMap: bool
     visionRadius: float
 

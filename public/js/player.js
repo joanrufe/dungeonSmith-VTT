@@ -90,6 +90,9 @@ socket.on('fogOpacity', ({ sceneId, fogOpacity }) => {
 
 // Function to render a scene
 function renderScene(scene) {
+  sceneRenderer._expandedConditionTokens.clear();
+  _conditionsModalTokenId = null;
+  _hideConditionsModal();
   sceneRenderer.renderScene(scene);
   scene.tokens
     .filter(t => !t.hidden && t.visibleToPlayers !== false)
@@ -112,6 +115,15 @@ socket.on('updateToken', ({ sceneId, tokenId, properties }) => {
 
     // Redraw fog: token position or vision radius may have changed
     sceneRenderer.drawFog();
+
+    // Keep the conditions modal in sync; collapse if the token is hidden.
+    if (token.hidden || token.visibleToPlayers === false) {
+      if (sceneRenderer._expandedConditionTokens.has(tokenId)) {
+        _toggleTokenConditionsExpanded(tokenId);
+      }
+    } else if ('conditions' in properties && _conditionsModalTokenId === tokenId) {
+      _showConditionsModal(tokenId);
+    }
 
     // Only re-setup interactions when interaction-relevant props change
     if ('movableByPlayers' in properties || 'hidden' in properties || 'visibleToPlayers' in properties) {
@@ -174,6 +186,11 @@ socket.on('removeToken', ({ sceneId, tokenId }) => {
   const element = document.getElementById(`token-${tokenId}`);
   if (element && element.parentNode === sceneContainer) {
     sceneContainer.removeChild(element);
+  }
+
+  sceneRenderer._expandedConditionTokens.delete(tokenId);
+  if (_conditionsModalTokenId === tokenId) {
+    _hideConditionsModal();
   }
 
   // Removed token may have been a vision source
@@ -373,6 +390,137 @@ socket.on('toggleGrid', ({ visible, gridSize, gridType }) => {
     if (playerGridCanvas) playerGridCanvas.style.display = 'none';
   }
 });
+
+// ─── Token conditions expansion (Player Side) ────────────────────────────
+let _conditionsModalTokenId = null;
+let _conditionsLongPressHandled = false;
+let _longPressTimer = null;
+let _longPressStart = null;
+const CONDITIONS_LONG_PRESS_MS = 600;
+const CONDITIONS_LONG_PRESS_THRESHOLD_PX = 10;
+
+function _tokenFromEventTarget(target) {
+  const el = target.closest('.token');
+  if (!el) return null;
+  const tokenId = el.dataset.tokenId;
+  return currentScene?.tokens.find(t => t.tokenId === tokenId) || null;
+}
+
+function _collapseTokenConditions(tokenId) {
+  if (sceneRenderer._expandedConditionTokens.has(tokenId)) {
+    sceneRenderer._expandedConditionTokens.delete(tokenId);
+    const token = currentScene?.tokens.find(t => t.tokenId === tokenId);
+    if (token) sceneRenderer.updateTokenElement(token);
+  }
+}
+
+function _hideConditionsModal() {
+  const modal = document.getElementById('token-conditions-modal');
+  modal?.classList.add('hidden');
+  _conditionsModalTokenId = null;
+}
+
+function _showConditionsModal(tokenId) {
+  const token = currentScene?.tokens.find(t => t.tokenId === tokenId);
+  if (!token) return;
+  const modal = document.getElementById('token-conditions-modal');
+  if (!modal) return;
+  const list = modal.querySelector('.token-conditions-list');
+  if (!list) return;
+  list.innerHTML = '';
+  (token.conditions || []).forEach((cond) => {
+    const item = document.createElement('div');
+    item.className = 'token-condition-modal-item';
+    item.textContent = cond.text || '';
+    item.style.color = cond.color || '#ffffff';
+    list.appendChild(item);
+  });
+  modal.classList.remove('hidden');
+  _conditionsModalTokenId = tokenId;
+}
+
+function _toggleTokenConditionsExpanded(tokenId) {
+  const already = sceneRenderer._expandedConditionTokens.has(tokenId);
+  // Collapse any other expanded token so only one modal is open at a time.
+  Array.from(sceneRenderer._expandedConditionTokens).forEach((id) => {
+    sceneRenderer._expandedConditionTokens.delete(id);
+    const t = currentScene?.tokens.find(tok => tok.tokenId === id);
+    if (t) sceneRenderer.updateTokenElement(t);
+  });
+  _hideConditionsModal();
+  if (!already) {
+    sceneRenderer._expandedConditionTokens.add(tokenId);
+    const token = currentScene?.tokens.find(t => t.tokenId === tokenId);
+    if (token) sceneRenderer.updateTokenElement(token);
+    _showConditionsModal(tokenId);
+  }
+}
+
+function _clearConditionsLongPress() {
+  if (_longPressTimer) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
+  }
+  _longPressStart = null;
+}
+
+sceneContainer.addEventListener('contextmenu', (event) => {
+  const token = _tokenFromEventTarget(event.target);
+  if (!token || !token.conditions?.length) return;
+  event.preventDefault();
+  if (_conditionsLongPressHandled) {
+    _conditionsLongPressHandled = false;
+    return;
+  }
+  _toggleTokenConditionsExpanded(token.tokenId);
+});
+
+sceneContainer.addEventListener('touchstart', (event) => {
+  if (event.touches.length !== 1) return;
+  const token = _tokenFromEventTarget(event.touches[0].target);
+  if (!token || !token.conditions?.length) return;
+  const touch = event.touches[0];
+  _longPressStart = { x: touch.clientX, y: touch.clientY, tokenId: token.tokenId };
+  _conditionsLongPressHandled = false;
+  _longPressTimer = setTimeout(() => {
+    _longPressTimer = null;
+    _conditionsLongPressHandled = true;
+    _toggleTokenConditionsExpanded(token.tokenId);
+  }, CONDITIONS_LONG_PRESS_MS);
+}, { passive: true });
+
+sceneContainer.addEventListener('touchmove', (event) => {
+  if (!_longPressStart) return;
+  const touch = event.touches[0];
+  const dx = touch.clientX - _longPressStart.x;
+  const dy = touch.clientY - _longPressStart.y;
+  if (Math.hypot(dx, dy) > CONDITIONS_LONG_PRESS_THRESHOLD_PX) {
+    _clearConditionsLongPress();
+  }
+}, { passive: true });
+
+sceneContainer.addEventListener('touchend', () => _clearConditionsLongPress());
+sceneContainer.addEventListener('touchcancel', () => _clearConditionsLongPress());
+
+function _setupConditionsModal() {
+  const modal = document.getElementById('token-conditions-modal');
+  if (!modal) return;
+  const closeBtn = modal.querySelector('.token-conditions-close');
+  const collapseCurrent = () => {
+    if (_conditionsModalTokenId) {
+      _collapseTokenConditions(_conditionsModalTokenId);
+      _hideConditionsModal();
+    }
+  };
+  closeBtn?.addEventListener('click', collapseCurrent);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) collapseCurrent();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') collapseCurrent();
+  });
+}
+_setupConditionsModal();
 
 // ─── Double Click Ping (Player Side) ──────────────────────────────────────
 sceneContainer.addEventListener('dblclick', (event) => {

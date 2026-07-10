@@ -25,6 +25,7 @@
  * @property {string|null}  [conditionText]
  * @property {string|null}  [conditionColor]
  * @property {number|null}  [conditionFontSize]
+ * @property {Array<{text:string,color:string}>} [conditions]
  * @property {boolean} [isMap]
  * @property {number}  [visionRadius]
  */

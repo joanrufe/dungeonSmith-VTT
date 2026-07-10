@@ -169,6 +169,53 @@
   }
   let _statusTokenId = null;
 
+  /**
+   * Normalize a token's conditions from legacy single-condition fields.
+   * @param {TokenDict} token
+   */
+  function _normalizeTokenConditions(token) {
+    if (!token || Array.isArray(token.conditions)) return;
+    const legacyText = token.conditionText != null ? String(token.conditionText).trim() : '';
+    if (legacyText) {
+      token.conditions = [{
+        text: legacyText,
+        color: token.conditionColor || '#ffffff',
+      }];
+    } else {
+      token.conditions = [];
+    }
+  }
+
+  function _renderConditionRows(conditions) {
+    const list = document.getElementById('tsp-cond-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (conditions || []).forEach((cond) => {
+      const row = document.createElement('div');
+      row.className = 'tsp-cond-row';
+      row.innerHTML = `
+        <input type="text" class="tsp-cond-text-input" placeholder="e.g. Poisoned" value="">
+        <input type="color" class="tsp-cond-color-input" value="#ffffff">
+        <button type="button" class="tsp-cond-remove" title="Remove condition"><i class="fa-solid fa-trash"></i></button>
+      `;
+      row.querySelector('.tsp-cond-text-input').value = cond.text || '';
+      row.querySelector('.tsp-cond-color-input').value = cond.color || '#ffffff';
+      row.querySelector('.tsp-cond-remove').addEventListener('click', () => row.remove());
+      list.appendChild(row);
+    });
+  }
+
+  function _readConditionsFromUI() {
+    const rows = document.querySelectorAll('#tsp-cond-list .tsp-cond-row');
+    const conditions = [];
+    rows.forEach((row) => {
+      const text = row.querySelector('.tsp-cond-text-input').value.trim();
+      const color = row.querySelector('.tsp-cond-color-input').value || '#ffffff';
+      if (text) conditions.push({ text, color });
+    });
+    return conditions;
+  }
+
   function setupStatusPopup() {
     const popup = document.getElementById('token-status-popup');
     if (!popup) return;
@@ -186,6 +233,15 @@
       popup.style.display = 'none';
     });
 
+    document.getElementById('tsp-add-cond').addEventListener('click', () => {
+      const list = document.getElementById('tsp-cond-list');
+      const conditions = _readConditionsFromUI();
+      conditions.push({ text: '', color: '#ff0000' });
+      _renderConditionRows(conditions);
+      const input = list.querySelector('.tsp-cond-row:last-child .tsp-cond-text-input');
+      if (input) input.focus();
+    });
+
     document.getElementById('tsp-apply').addEventListener('click', () => {
       const ctx = getContext();
       if (!ctx || !ctx.scene || !_statusTokenId) return;
@@ -194,8 +250,7 @@
 
       const cur      = parseInt(document.getElementById('tsp-hp-cur').value);
       const max      = parseInt(document.getElementById('tsp-hp-max').value);
-      const cond     = document.getElementById('tsp-cond-text').value.trim();
-      const fontSize = parseInt(document.getElementById('tsp-cond-size').value) || 22;
+      const conditions = _readConditionsFromUI();
       const radiusCells = parseFloat(document.getElementById('tsp-vision-radius').value);
       const isMap    = document.getElementById('tsp-is-map').checked;
       const visibleToPlayers = document.getElementById('tsp-visible-to-players').checked;
@@ -203,23 +258,25 @@
 
       token.hpCurrent        = isNaN(cur) ? null : cur;
       token.hpMax            = isNaN(max) ? null : max;
-      token.conditionText    = cond || null;
-      token.conditionColor   = cond ? document.getElementById('tsp-cond-color').value : null;
-      token.conditionFontSize = cond ? fontSize : null;
+      token.conditions       = conditions;
+      token.conditionText    = null;
+      token.conditionColor   = null;
+      token.conditionFontSize = null;
       token.visionRadius     = isNaN(radiusCells) ? 0 : Math.max(0, radiusCells) * gridSize;
       token.isMap            = isMap;
       token.visibleToPlayers = visibleToPlayers;
 
       /** @type {Record<string,any>} */
       const properties = {
-        hpCurrent:       token.hpCurrent,
-        hpMax:           token.hpMax,
-        conditionText:   token.conditionText,
-        conditionColor:  token.conditionColor,
-        conditionFontSize: token.conditionFontSize,
-        visionRadius:    token.visionRadius,
-        isMap:           token.isMap,
-        visibleToPlayers: token.visibleToPlayers,
+        hpCurrent:         token.hpCurrent,
+        hpMax:             token.hpMax,
+        conditions:        token.conditions,
+        conditionText:     null,
+        conditionColor:    null,
+        conditionFontSize: null,
+        visionRadius:      token.visionRadius,
+        isMap:             token.isMap,
+        visibleToPlayers:  token.visibleToPlayers,
       };
 
       // When marking as a map token, lock it and send it to the background
@@ -268,9 +325,9 @@
 
     document.getElementById('tsp-hp-cur').value      = token.hpCurrent != null ? token.hpCurrent : '';
     document.getElementById('tsp-hp-max').value      = token.hpMax     != null ? token.hpMax     : '';
-    document.getElementById('tsp-cond-text').value   = token.conditionText   || '';
-    document.getElementById('tsp-cond-size').value   = token.conditionFontSize || 22;
-    document.getElementById('tsp-cond-color').value  = token.conditionColor  || '#ffffff';
+
+    _normalizeTokenConditions(token);
+    _renderConditionRows(token.conditions);
 
     const gridSize = window.VTT_GRID_SIZE || 60;
     const radiusCells = token.visionRadius ? token.visionRadius / gridSize : 0;
