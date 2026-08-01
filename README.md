@@ -183,6 +183,7 @@ Open `/player-files` for the player-facing media library.
 - `Ctrl+Click` - Add token to selection (group select)
 - `Q` / `E` - Rotate selected token
 - `Shift+Q` / `Shift+E` - Fine rotate selected token
+- `Alt` - Show rotation handle on a selected token; drag the handle to rotate
 - `T` - Toggle DM toolbar
 - `Shift+D` - Delete current scene
 - `Double-click` canvas or token - Ping location

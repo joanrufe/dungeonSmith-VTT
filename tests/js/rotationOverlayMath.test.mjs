@@ -79,8 +79,8 @@ assert.equal(snapRotation(37, false), 30, 'default snaps to nearest 15°');
 assert.equal(snapRotation(38, false), 45, 'default snaps up to next 15°');
 assert.equal(snapRotation(44, false), 45, 'default snaps up near boundary');
 assert.equal(snapRotation(-7, false), 0, 'default snaps negative toward zero');
-assert.equal(snapRotation(37.6, true), 38, 'Shift disables snap and rounds to integer');
-assert.equal(snapRotation(37.2, true), 37, 'Shift rounds down to integer');
-assert.equal(snapRotation(-37.6, true), -38, 'Shift keeps sign when rounding');
+assert.equal(snapRotation(37.6, true), 38, 'Alt disables snap and rounds to integer');
+assert.equal(snapRotation(37.2, true), 37, 'Alt rounds down to integer');
+assert.equal(snapRotation(-37.6, true), -38, 'Alt keeps sign when rounding');
 
 console.log('rotationOverlayMath tests passed');
