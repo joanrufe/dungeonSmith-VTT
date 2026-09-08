@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DungeonSmith - Turn Tracker</title>
+  <link rel="icon" type="image/png" href="./DungeonSmith.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="/css/theme.css?v=scenesmith-clean-1">
+  <link rel="stylesheet" href="/css/turnTracker.css?v=scenesmith-clean-1">
+</head>
+<body>
+  <header id="tracker-header">
+    <div class="tracker-title">
+      <i class="fa-solid fa-khanda"></i>
+      <span id="scene-name">Turn Tracker</span>
+    </div>
+    <div id="round-display" class="round-display">Round 1</div>
+  </header>
+
+  <main id="tracker-main">
+    <div id="turn-list" class="turn-list"></div>
+    <div id="empty-state" class="empty-state hidden">
+      <i class="fa-solid fa-chess-knight"></i>
+      <p>No visible combatants.</p>
+      <p class="empty-sub">The DM can set initiative from a token's status popup.</p>
+    </div>
+  </main>
+
+  <footer id="dm-controls" class="dm-controls hidden">
+    <button id="prev-turn-btn" class="tt-btn">
+      <i class="fa-solid fa-chevron-left"></i> Prev Turn
+    </button>
+    <button id="next-turn-btn" class="tt-btn tt-primary">
+      <i class="fa-solid fa-chevron-right"></i> Next Turn
+    </button>
+    <button id="reset-turn-btn" class="tt-btn">
+      <i class="fa-solid fa-arrow-rotate-left"></i> Reset
+    </button>
+  </footer>
+
+  <script src="/lib/socket.io/socket.io.min.js"></script>
+  <script src="/js/turnTracker.js"></script>
+</body>
+</html>

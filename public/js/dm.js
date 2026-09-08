@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('music', file);
 
-        fetch('/uploadMusic', {
+        fetch(`/uploadMusic?folder=${encodeURIComponent(musicManager.currentFolder)}`, {
           method: 'POST',
           body: formData,
         })
@@ -91,7 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
               const filename = data.filename;
               const displayName = data.displayName;
               // Add the music track to the MusicManager
-              musicManager.addMusicTrack(musicUrl, filename, displayName);
+              musicManager.addMusicTrack(musicUrl, filename, displayName, null, musicManager.currentFolder);
+              musicManager.renderMusicList();
             } else {
               alert('Music upload failed');
             }
@@ -110,10 +111,8 @@ document.addEventListener('DOMContentLoaded', () => {
     .then((response) => response.json())
     .then((data) => {
       if (data.success) {
-        // Add each track to the MusicManager
-        data.musicTracks.forEach((track) => {
-          musicManager.addMusicTrack(track.url, track.filename, track.name, track.trackId);
-        });
+        // Load folders and tracks into the MusicManager
+        musicManager.loadFromResponse(data);
       } else {
         console.error('Error fetching music list:', data.message);
       }

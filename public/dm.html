@@ -115,6 +115,7 @@
         <tr><th colspan="2">Communication &amp; Tracking</th></tr>
         <tr><td><kbd>Double Click</kbd></td><td>Ping the scene (blue/green indicator)</td></tr>
         <tr><td><kbd>Double-click</kbd> row</td><td>Set active turn in initiative</td></tr>
+        <tr><td><kbd>Token Status popup</kbd></td><td>Initiative field sets the tablet turn tracker</td></tr>
       </table>
     </div>
   </div>
@@ -140,6 +141,12 @@
       <span><i class="fa-solid fa-music"></i> MUSIC CONTROLS</span>
       <span class="drag-hint">☰</span>
     </div>
+    <div id="music-folder-controls">
+      <select id="music-folder-select" title="Upload destination folder">
+        <option value="">Root</option>
+      </select>
+      <button id="music-new-folder-btn" title="Create new folder"><i class="fa-solid fa-folder-plus"></i></button>
+    </div>
     <div id="music-drop-area">
       Drop audio files here<br>(MP3, WAV, WebM)<br>or click to select
     </div>
@@ -149,10 +156,8 @@
   <!-- ═══ INITIATIVE PANEL (floating pop-out) ═══ -->
   <div id="initiative-panel" class="draggable-panel panel-hidden">
     <div class="panel-drag-handle"><span><i class="fa-solid fa-khanda"></i> Initiative</span><span class="drag-hint">☰</span></div>
-    <div class="init-input-row">
-      <input type="text"   id="init-name" placeholder="Name" />
-      <input type="number" id="init-val"  placeholder="Init" style="width:60px;" />
-      <button id="add-init-btn">+</button>
+    <div class="init-title-row">
+      <input type="text" id="init-title" placeholder="Combat title" />
     </div>
     <div class="init-action-row">
       <button id="prev-init-btn"><i class="fa-solid fa-chevron-left"></i> Prev</button>
@@ -163,7 +168,7 @@
       <button id="clear-init-btn"><i class="fa-solid fa-trash-can"></i> Clear</button>
     </div>
     <div id="init-round-display" class="init-round-display">Round 1</div>
-    <p class="init-hint">Double-click a row to set active turn</p>
+    <p class="init-hint">Entries come from token initiative. Toggle a row to skip it.</p>
     <ul id="init-list"></ul>
   </div>
 
@@ -394,10 +399,18 @@
   <div id="token-status-popup">
     <div class="tsp-title"><i class="fa-solid fa-heart-pulse"></i> Token Status</div>
     <div class="tsp-row">
+      <label>Name</label>
+      <input type="text" id="tsp-name" placeholder="Token name" style="flex:1">
+    </div>
+    <div class="tsp-row">
       <label>HP</label>
       <input type="number" id="tsp-hp-cur" placeholder="—" min="0">
       <span class="tsp-slash">/</span>
       <input type="number" id="tsp-hp-max" placeholder="—" min="0">
+    </div>
+    <div class="tsp-row">
+      <label>Initiative</label>
+      <input type="number" id="tsp-initiative" placeholder="—" min="0" style="width:60px">
     </div>
     <div class="tsp-row tsp-cond-list-row">
       <label>Conditions</label>
@@ -419,6 +432,9 @@
     <div class="tsp-row">
       <label for="tsp-visible-to-players">Visible to players</label>
       <input type="checkbox" id="tsp-visible-to-players" checked>
+    </div>
+    <div class="tsp-row">
+      <button id="tsp-duplicate" type="button"><i class="fa-solid fa-copy"></i> Duplicate token</button>
     </div>
     <div class="tsp-btns">
       <button id="tsp-apply">Apply</button>

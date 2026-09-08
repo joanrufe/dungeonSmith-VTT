@@ -3,7 +3,7 @@ schema: spec-driven
 context: |
   Tech stack: Python 3.8+ (Flask>=3<4, Flask-SocketIO>=5.3<6, python-socketio>=5.11<6,
     Werkzeug>=3<4), async_mode="threading". Single monolithic `app.py` (~1,370 lines,
-    port 3000, env VTT_PORT). No package.json; Node files are deprecated reference only.
+    port 3001, env VTT_PORT). No package.json; Node files are deprecated reference only.
   Frontend: framework-less vanilla JS/HTML/CSS in `public/`, served statically by Flask
     (static_url_path=""). Vendored libs in `public/lib/` (incl. 3D dice, socket.io.min.js).
   Architecture: server-authoritative. SceneStore holds scenes in memory + persists to

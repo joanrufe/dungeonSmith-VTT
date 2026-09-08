@@ -44,11 +44,11 @@ export function computeRotationOverlayPositions(token, scale, offsetX, offsetY, 
  * Snap a rotation value to the user-facing precision.
  *
  * @param {number} rotation
- * @param {boolean} shiftKey
+ * @param {boolean} altKey
  * @returns {number}
  */
-export function snapRotation(rotation, shiftKey) {
-  if (shiftKey) {
+export function snapRotation(rotation, altKey) {
+  if (altKey) {
     return Math.round(rotation);
   }
   return Math.round(rotation / 15) * 15;

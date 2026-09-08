@@ -20,8 +20,8 @@ export class RotationOverlay {
     this.HANDLE_OFFSET = 24; // screen px beyond the rotated top edge
     this.MOVE_THRESHOLD = 3; // px; smaller movements are treated as a click
 
-    /** Whether the Shift key is currently held down. */
-    this._shiftKey = false;
+    /** Whether the Alt key is currently held down. */
+    this._altKey = false;
     this._boundKeyDown = this._onKeyDown.bind(this);
     this._boundKeyUp = this._onKeyUp.bind(this);
     window.addEventListener('keydown', this._boundKeyDown);
@@ -91,19 +91,19 @@ export class RotationOverlay {
    * @returns {boolean}
    */
   _shouldShowHandle(ids, token) {
-    return ids.length === 1 && !token.locked && !!this.sceneManager?.isDM && this._shiftKey;
+    return ids.length === 1 && !token.locked && !!this.sceneManager?.isDM && this._altKey;
   }
 
   _onKeyDown(event) {
-    if (event.key === 'Shift' && !this._shiftKey) {
-      this._shiftKey = true;
+    if (event.altKey && !this._altKey) {
+      this._altKey = true;
       this.sync(this.sceneManager?.selectedTokenIds);
     }
   }
 
   _onKeyUp(event) {
-    if (event.key === 'Shift' && this._shiftKey) {
-      this._shiftKey = false;
+    if (!event.altKey && this._altKey) {
+      this._altKey = false;
       this.sync(this.sceneManager?.selectedTokenIds);
     }
   }
@@ -261,8 +261,9 @@ export class RotationOverlay {
     const token = this._getToken(tokenId);
     if (!token) return;
 
-    // Preserve multi-select semantics when the user clicks the handle with a modifier.
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+    // Preserve multi-select semantics when the user clicks the handle with Ctrl/Meta.
+    // Alt is the rotation modifier, so Alt+click must start a drag, not toggle selection.
+    if (event.ctrlKey || event.metaKey) {
       this.sceneManager.toggleSelectedTokenId(tokenId);
       return;
     }
@@ -319,7 +320,7 @@ export class RotationOverlay {
     while (delta > Math.PI) delta -= 2 * Math.PI;
 
     let rotation = drag.startRotation + (delta * 180) / Math.PI;
-    if (event.shiftKey) {
+    if (event.altKey) {
       rotation = Math.round(rotation);
     }
 
@@ -344,7 +345,7 @@ export class RotationOverlay {
       // Treat as a selection click.
       this.sceneManager.selectSingleTokenId(drag.tokenId);
     } else {
-      const rotation = snapRotation(drag.token.rotation, event.shiftKey);
+      const rotation = snapRotation(drag.token.rotation, event.altKey);
       drag.token.rotation = rotation;
       this.sceneRenderer.updateTokenElement(drag.token);
 

@@ -3,7 +3,7 @@ setlocal
 title DungeonSmith VTT
 cd /d "%~dp0"
 
-set "VTT_PORT=3000"
+set "VTT_PORT=3001"
 set "PYTHON_CMD=py -3"
 
 echo.

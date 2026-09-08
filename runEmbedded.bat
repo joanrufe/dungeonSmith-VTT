@@ -11,8 +11,8 @@ REM ############ BAT SETTINGS
 REM Name of file to run without drag and drop
 set "APP_NAME=app.py"
 
-REM Server port (must match VTT_PORT env var if set, otherwise app.py defaults to 3000)
-set "PORT=3000"
+REM Server port (must match VTT_PORT env var if set, otherwise app.py defaults to 3001)
+set "PORT=3001"
 
 REM Embedded Python Version
 set "PY_VER=3.12.10"

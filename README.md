@@ -111,14 +111,14 @@ Then start the server:
 python app.py
 ```
 
-The server starts on port `3000` by default. Override with the `VTT_PORT` environment variable.
+The server starts on port `3001` by default. Override with the `VTT_PORT` environment variable.
 
 Default URLs:
 
-- Player view: `http://localhost:3000`
-- Player Files: `http://localhost:3000/player-files`
-- DM view: `http://localhost:3000/dm`
-- DM Admin/Files: `http://localhost:3000/dmadmin`
+- Player view: `http://localhost:3001`
+- Player Files: `http://localhost:3001/player-files`
+- DM view: `http://localhost:3001/dm`
+- DM Admin/Files: `http://localhost:3001/dmadmin`
 
 Default passwords:
 
@@ -183,6 +183,7 @@ Open `/player-files` for the player-facing media library.
 - `Ctrl+Click` - Add token to selection (group select)
 - `Q` / `E` - Rotate selected token
 - `Shift+Q` / `Shift+E` - Fine rotate selected token
+- `Alt` - Show rotation handle on a selected token; drag the handle to rotate
 - `T` - Toggle DM toolbar
 - `Shift+D` - Delete current scene
 - `Double-click` canvas or token - Ping location
