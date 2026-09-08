@@ -87,10 +87,24 @@ these when touching `app.py` backend behavior:
 
 ## Tests / lint / CI
 
-**None exist.** No `tests/`, no pytest/unittest, no `pyproject.toml`/`.flake8`/
-`ruff`/`mypy`, no `.github/`, no pre-commit, no `package.json` scripts. The only
-quality gate is `python -m py_compile app.py` inside `runVirtualEnv.bat`. Don't
-assume config exists for `pytest`/`ruff`; don't expect CI to gate anything.
+**Tests exist** (pytest, 78 passing as of 2026-09): run them with
+`.venv/bin/python -m pytest tests/`. Note `pytest` is **not** declared in
+`requirements.txt` — it's installed in `.venv` only (undeclared dev dependency).
+
+- `tests/conftest.py` — fixtures: `tmp_data` (redirects all persistent storage to
+  a temp dir via `app.initialize_for_test()`), `client`/`dm_client`/
+  `player_client` (HTTP, logged-in sessions) and `dm_socket`/`player_socket`
+  (Flask-SocketIO `SocketIOTestClient` with `role=dm` / `role=player`).
+- `tests/test_smoke.py` — HTTP smoke tests (login redirects, pages).
+- `tests/test_campaign.py` — campaign/scene-store behavior tests.
+- `tests/test_rotation_overlay_math.py` — shells out to Node to run
+  `tests/js/rotationOverlayMath.test.mjs` (pure JS geometry helper); skipped if
+  `node` is not on PATH.
+
+Still no lint/format/type-check config (no `pyproject.toml`, `.flake8`, `ruff`,
+`mypy`), no `.github/` CI, no pre-commit, no `package.json` scripts. There is no
+CI gate — run the pytest suite manually before pushing. `python -m py_compile
+app.py` remains the minimal check inside `runVirtualEnv.bat`.
 
 ## Known tech debt (from AIOptimizations.md, NOT yet applied)
 
