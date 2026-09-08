@@ -233,6 +233,15 @@
       popup.style.display = 'none';
     });
 
+    document.getElementById('tsp-duplicate').addEventListener('click', () => {
+      const ctx = getContext();
+      if (!ctx || !ctx.scene || !ctx.isDM || !_statusTokenId) return;
+      if (ctx.vtt && ctx.vtt.sceneManager && ctx.vtt.sceneManager.duplicateToken) {
+        ctx.vtt.sceneManager.duplicateToken(_statusTokenId);
+      }
+      popup.style.display = 'none';
+    });
+
     document.getElementById('tsp-add-cond').addEventListener('click', () => {
       const list = document.getElementById('tsp-cond-list');
       const conditions = _readConditionsFromUI();
@@ -248,14 +257,21 @@
       const token = ctx.scene.tokens.find(t => t.tokenId === _statusTokenId);
       if (!token) return;
 
+      const nameInput = document.getElementById('tsp-name');
+      const newName   = nameInput ? nameInput.value.trim() : '';
       const cur      = parseInt(document.getElementById('tsp-hp-cur').value);
       const max      = parseInt(document.getElementById('tsp-hp-max').value);
+      const initInput = document.getElementById('tsp-initiative');
+      const initRaw  = initInput ? parseInt(initInput.value) : NaN;
       const conditions = _readConditionsFromUI();
       const radiusCells = parseFloat(document.getElementById('tsp-vision-radius').value);
       const isMap    = document.getElementById('tsp-is-map').checked;
       const visibleToPlayers = document.getElementById('tsp-visible-to-players').checked;
       const gridSize = window.VTT_GRID_SIZE || 60;
 
+      if (newName) {
+        token.name = newName;
+      }
       token.hpCurrent        = isNaN(cur) ? null : cur;
       token.hpMax            = isNaN(max) ? null : max;
       token.conditions       = conditions;
@@ -265,9 +281,11 @@
       token.visionRadius     = isNaN(radiusCells) ? 0 : Math.max(0, radiusCells) * gridSize;
       token.isMap            = isMap;
       token.visibleToPlayers = visibleToPlayers;
+      token.initiative       = isNaN(initRaw) ? null : initRaw;
 
       /** @type {Record<string,any>} */
       const properties = {
+        name:              token.name,
         hpCurrent:         token.hpCurrent,
         hpMax:             token.hpMax,
         conditions:        token.conditions,
@@ -277,6 +295,7 @@
         visionRadius:      token.visionRadius,
         isMap:             token.isMap,
         visibleToPlayers:  token.visibleToPlayers,
+        initiative:        token.initiative,
       };
 
       // When marking as a map token, lock it and send it to the background
@@ -306,6 +325,14 @@
         tokenId:    _statusTokenId,
         properties,
       });
+
+      // Sync the per-scene turn tracker if the DM provided or cleared an initiative value.
+      ctx.socket.emit('setInitiative', {
+        sceneId:    token.sceneId,
+        tokenId:    _statusTokenId,
+        initiative: isNaN(initRaw) ? null : initRaw,
+      });
+
       popup.style.display = 'none';
     });
   }
@@ -323,8 +350,12 @@
     if (!token) return;
     _statusTokenId = tokenId;
 
+    const nameInput = document.getElementById('tsp-name');
+    if (nameInput) nameInput.value = token.name || '';
     document.getElementById('tsp-hp-cur').value      = token.hpCurrent != null ? token.hpCurrent : '';
     document.getElementById('tsp-hp-max').value      = token.hpMax     != null ? token.hpMax     : '';
+    const initInput = document.getElementById('tsp-initiative');
+    if (initInput) initInput.value = token.initiative != null ? token.initiative : '';
 
     _normalizeTokenConditions(token);
     _renderConditionRows(token.conditions);

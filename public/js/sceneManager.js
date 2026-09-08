@@ -441,8 +441,18 @@ export class SceneManager {
       });
       nameWrapper.appendChild(editBtn);
 
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'scene-dd-delete';
+      deleteBtn.title = 'Delete scene';
+      deleteBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._deleteScene(scene.sceneId);
+      });
+      nameWrapper.appendChild(deleteBtn);
+
       nameWrapper.addEventListener('click', (e) => {
-        if (e.target.closest('.scene-dd-edit')) return;
+        if (e.target.closest('.scene-dd-edit') || e.target.closest('.scene-dd-delete')) return;
         this.onSceneButtonClick(scene);
         this._closeDropdown();
       });
@@ -1177,45 +1187,35 @@ export class SceneManager {
     }
   }
 
+  duplicateToken(tokenId) {
+    const originalToken = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
+    if (!originalToken) return null;
+    const newToken = JSON.parse(JSON.stringify(originalToken));
+    newToken.tokenId = Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9);
+    const offset = 20;
+    newToken.x = originalToken.x + offset;
+    newToken.y = originalToken.y + offset;
+    newToken.zIndex = originalToken.zIndex + 1;
+    newToken.name = (originalToken.name || 'Token') + ' - Copy';
+    this.currentScene.tokens.push(newToken);
+    this.socket.emit('addToken', { sceneId: this.currentScene.sceneId, token: newToken });
+    this.sceneRenderer.renderToken(newToken);
+    this.tokenManager.setupTokenInteractions(newToken);
+    const element = document.getElementById(`token-${newToken.tokenId}`);
+    if (element) {
+      element.addEventListener('click', (event) => this.onTokenClick(event, newToken.tokenId));
+    }
+    return newToken.tokenId;
+  }
+
   duplicateSelectedToken() {
     const selectedIds = this.getSelectedTokenIds();
     if (selectedIds.length) {
       const newSelection = [];
       selectedIds.forEach((tokenId) => {
-        const originalToken = this.currentScene.tokens.find((t) => t.tokenId === tokenId);
-        if (!originalToken) return;
-      // Clone the original token
-      const newToken = JSON.parse(JSON.stringify(originalToken));
-  
-      // Generate a new unique tokenId
-      newToken.tokenId = Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9);
-  
-      // Offset the new token's position slightly
-      const offset = 20; // Adjust as needed
-      newToken.x = originalToken.x + offset;
-      newToken.y = originalToken.y + offset;
-      newToken.zIndex = originalToken.zIndex + 1;
-  
-      // Add the new token to the current scene's tokens array
-      this.currentScene.tokens.push(newToken);
-  
-      // Notify the server about the new token
-      this.socket.emit('addToken', { sceneId: this.currentScene.sceneId, token: newToken });
-  
-      // Render the new token
-      this.sceneRenderer.renderToken(newToken);
-  
-      // Setup interactions for the new token
-      this.tokenManager.setupTokenInteractions(newToken);
-  
-      // Add event listener for token selection
-      const element = document.getElementById(`token-${newToken.tokenId}`);
-      if (element) {
-        element.addEventListener('click', (event) => this.onTokenClick(event, newToken.tokenId));
-      }
-        newSelection.push(newToken.tokenId);
+        const newId = this.duplicateToken(tokenId);
+        if (newId) newSelection.push(newId);
       });
-
       this.selectedTokenIds = new Set(newSelection);
       this.selectedTokenId = newSelection.at(-1) || null;
       this.refreshSelectionStyles();
@@ -1418,6 +1418,23 @@ export class SceneManager {
         console.error('Error deleting scene:', error);
         alert('An error occurred while deleting the scene.');
       });
+  }
+
+  async _deleteScene(sceneId) {
+    if (!sceneId) return;
+    if (!confirm('Are you sure you want to delete this scene? This cannot be undone.')) return;
+    try {
+      const res = await fetch('/deleteScene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneId }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Delete failed');
+    } catch (err) {
+      console.error('Error deleting scene:', err);
+      alert('Failed to delete scene.');
+    }
   }
 
   /**

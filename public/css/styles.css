@@ -873,7 +873,8 @@ button:hover {
   border-color: #c62828;
   color: #fff;
 }
-#tsp-add-cond {
+#tsp-add-cond,
+#tsp-duplicate {
   flex: 1;
   padding: 5px;
   font-size: 11px;
@@ -882,7 +883,8 @@ button:hover {
   color: #e8e8e8;
   cursor: pointer;
 }
-#tsp-add-cond:hover {
+#tsp-add-cond:hover,
+#tsp-duplicate:hover {
   background: var(--ss-control-hover);
   border-color: var(--ss-orange);
 }

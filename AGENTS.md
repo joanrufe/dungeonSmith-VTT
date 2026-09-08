@@ -6,7 +6,7 @@ SamsterJam's MiniVTT. D&D virtual tabletop for trusted local/LAN games.
 ## The one thing you must know first
 
 **The live server is `app.py` only.** Flask + Flask-SocketIO, single ~950-line file,
-port 3000. Everything else Node-shaped in this repo is **dead reference code**.
+port 3001. Everything else Node-shaped in this repo is **dead reference code**.
 
 - `app.py` — the only entrypoint. Run it.
 - `server.js`, `app.js`, `routes.js`, `socketHandler.js`, `controllers/`,
@@ -26,7 +26,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-- Port: `3000` default. Override with env `VTT_PORT`.
+- Port: `3001` default. Override with env `VTT_PORT`.
 - Files auto-created at startup (no manual setup): `data/private/secrets.txt`,
   `data/scenes/`, `data/sticky-notes.json`, `public/{uploads,media,music,player-media}`.
 - `SESSION_SECRET` env is optional (random per restart if unset → sessions don't

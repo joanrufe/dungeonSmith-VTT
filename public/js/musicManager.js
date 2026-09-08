@@ -6,9 +6,27 @@ export class MusicManager {
 
     // Music management properties
     this.musicTracks = []; // List of uploaded music tracks with individual controls
+    this.folders = []; // Folder names from the server
+    this.currentFolder = ''; // Destination folder for uploads
 
     // Initialize the music list in the UI
     this.musicListElement = document.getElementById('music-list');
+    this.folderSelectElement = document.getElementById('music-folder-select');
+    this.newFolderButton = document.getElementById('music-new-folder-btn');
+
+    this._bindFolderControls();
+  }
+
+  _bindFolderControls() {
+    if (this.folderSelectElement) {
+      this.folderSelectElement.addEventListener('change', () => {
+        this.currentFolder = this.folderSelectElement.value;
+      });
+    }
+
+    if (this.newFolderButton) {
+      this.newFolderButton.addEventListener('click', () => this.createFolder());
+    }
   }
 
   _buildTrackElement(track, index) {
@@ -40,6 +58,12 @@ export class MusicManager {
       this.setTrackVolume(index, volume);
     });
 
+    const moveButton = document.createElement('button');
+    moveButton.classList.add('move-button');
+    moveButton.innerHTML = '<i class="fa-solid fa-folder-tree"></i>';
+    moveButton.title = 'Move to folder';
+    moveButton.addEventListener('click', () => this._showMoveSelector(li, index));
+
     const deleteButton = document.createElement('button');
     deleteButton.classList.add('delete-button');
     deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i>';
@@ -47,6 +71,7 @@ export class MusicManager {
 
     controlsContainer.appendChild(playPauseButton);
     controlsContainer.appendChild(volumeSlider);
+    controlsContainer.appendChild(moveButton);
     controlsContainer.appendChild(deleteButton);
 
     li.appendChild(trackNameSpan);
@@ -55,39 +80,153 @@ export class MusicManager {
     return li;
   }
 
+  _showMoveSelector(trackLi, index) {
+    // Avoid creating multiple selectors
+    if (trackLi.querySelector('.music-move-controls')) return;
+
+    const track = this.musicTracks[index];
+    if (!track) return;
+
+    const controls = document.createElement('div');
+    controls.classList.add('music-move-controls');
+
+    const select = document.createElement('select');
+    select.classList.add('music-move-select');
+
+    const rootOption = document.createElement('option');
+    rootOption.value = '';
+    rootOption.textContent = 'Root';
+    rootOption.selected = !track.folder;
+    select.appendChild(rootOption);
+
+    this.folders.forEach((folderName) => {
+      const option = document.createElement('option');
+      option.value = folderName;
+      option.textContent = folderName;
+      option.selected = folderName === track.folder;
+      select.appendChild(option);
+    });
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.classList.add('music-move-confirm');
+    confirmBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    confirmBtn.title = 'Move';
+    confirmBtn.addEventListener('click', () => {
+      const targetFolder = select.value;
+      if (targetFolder === track.folder) {
+        controls.remove();
+        return;
+      }
+      this.moveTrack(index, targetFolder);
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.classList.add('music-move-cancel');
+    cancelBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    cancelBtn.title = 'Cancel';
+    cancelBtn.addEventListener('click', () => controls.remove());
+
+    controls.appendChild(select);
+    controls.appendChild(confirmBtn);
+    controls.appendChild(cancelBtn);
+
+    trackLi.appendChild(controls);
+  }
+
+  _buildFolderElement(folderName, tracks) {
+    const folderLi = document.createElement('li');
+    folderLi.classList.add('music-folder');
+
+    const header = document.createElement('div');
+    header.classList.add('music-folder-header');
+
+    const toggle = document.createElement('button');
+    toggle.classList.add('music-folder-toggle');
+    toggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+
+    const title = document.createElement('span');
+    title.classList.add('music-folder-name');
+    title.innerHTML = `<i class="fa-solid fa-folder"></i> ${folderName}`;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.classList.add('music-folder-delete');
+    deleteBtn.innerHTML = '<i class="fa-solid fa-trash-alt"></i>';
+    deleteBtn.title = 'Delete folder and its tracks';
+    deleteBtn.addEventListener('click', () => this.deleteFolder(folderName));
+
+    header.appendChild(toggle);
+    header.appendChild(title);
+    header.appendChild(deleteBtn);
+
+    const content = document.createElement('ul');
+    content.classList.add('music-folder-content');
+    tracks.forEach((track) => {
+      const index = this.musicTracks.indexOf(track);
+      content.appendChild(this._buildTrackElement(track, index));
+    });
+
+    header.addEventListener('click', (e) => {
+      if (e.target === deleteBtn || deleteBtn.contains(e.target)) return;
+      const collapsed = content.classList.toggle('collapsed');
+      toggle.innerHTML = collapsed
+        ? '<i class="fa-solid fa-chevron-right"></i>'
+        : '<i class="fa-solid fa-chevron-down"></i>';
+    });
+
+    folderLi.appendChild(header);
+    folderLi.appendChild(content);
+
+    return folderLi;
+  }
+
+  _refreshFolderSelect() {
+    if (!this.folderSelectElement) return;
+    const current = this.folderSelectElement.value;
+    this.folderSelectElement.innerHTML = '<option value="">Root</option>';
+    this.folders.forEach((name) => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      this.folderSelectElement.appendChild(option);
+    });
+    this.folderSelectElement.value = this.folders.includes(current) ? current : '';
+    this.currentFolder = this.folderSelectElement.value;
+  }
+
   // Method to add a music track
-  addMusicTrack(musicUrl, filename, displayName, trackId = null) {
+  addMusicTrack(musicUrl, filename, displayName, trackId = null, folder = '') {
     // Generate a unique track ID if not provided
     trackId = trackId || this.generateTrackId(filename);
-  
+
     // Process name to remove leading numbers and hyphens/underscores
     const displayNameProcessed = displayName || filename.replace(/^\d+\s*[-_]?\s*/, '');
-  
+
     const audioElement = new Audio(musicUrl);
     audioElement.loop = true;
-  
+
     // Desired initial slider position
     const initialSliderValue = 50;
     const exponent = 3;
-  
+
     // Calculate the initial volume based on the slider position and exponent
     const initialVolume = Math.pow(initialSliderValue / 100, exponent);
-  
+
     // Set the initial volume for the audio element
     audioElement.volume = initialVolume;
-  
+
     const track = {
       trackId: trackId,
       url: musicUrl,
       filename: filename, // For deletion
+      folder: folder,
       name: displayNameProcessed,
       audioElement: audioElement,
       isPlaying: false,
       volume: initialVolume,
     };
-  
+
     this.musicTracks.push(track);
-    this.musicListElement.appendChild(this._buildTrackElement(track, this.musicTracks.length - 1));
+    return track;
   }
 
   // Generate a unique track ID
@@ -95,11 +234,49 @@ export class MusicManager {
     return `${filename}-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
   }
 
+  // Load folders and tracks from the server response
+  loadFromResponse(data) {
+    // Clear existing tracks
+    this.musicTracks.forEach((track) => {
+      if (track.audioElement) {
+        track.audioElement.pause();
+        track.audioElement.src = '';
+      }
+    });
+    this.musicTracks = [];
+    this.folders = (data.folders || []).map((f) => f.name).sort();
+
+    (data.rootFiles || []).forEach((track) => {
+      this.addMusicTrack(track.url, track.filename, track.name, track.trackId, '');
+    });
+
+    (data.folders || []).forEach((folder) => {
+      (folder.files || []).forEach((track) => {
+        this.addMusicTrack(track.url, track.filename, track.name, track.trackId, folder.name);
+      });
+    });
+
+    this._refreshFolderSelect();
+    this.renderMusicList();
+  }
+
   // Method to render the music list in the UI
   renderMusicList() {
     this.musicListElement.innerHTML = '';
-    this.musicTracks.forEach((track, index) => {
+
+    // Root tracks first
+    const rootTracks = this.musicTracks.filter((t) => !t.folder);
+    rootTracks.forEach((track) => {
+      const index = this.musicTracks.indexOf(track);
       this.musicListElement.appendChild(this._buildTrackElement(track, index));
+    });
+
+    // Then folders
+    this.folders.forEach((folderName) => {
+      const folderTracks = this.musicTracks.filter((t) => t.folder === folderName);
+      if (folderTracks.length) {
+        this.musicListElement.appendChild(this._buildFolderElement(folderName, folderTracks));
+      }
     });
   }
 
@@ -174,11 +351,11 @@ export class MusicManager {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: track.filename }),
     })
-      .then(response => {
+      .then((response) => {
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
         return response.json();
       })
-      .then(data => {
+      .then((data) => {
         if (data.success) {
           track.audioElement.pause();
           track.audioElement.src = '';
@@ -195,10 +372,96 @@ export class MusicManager {
           alert(`Failed to delete "${track.name}".`);
         }
       })
-      .catch(err => {
+      .catch((err) => {
         console.error('Error deleting music track:', err);
         alert(`Error deleting "${track.name}". Check the console for details.`);
       });
   }
 
+  moveTrack(index, targetFolder) {
+    const track = this.musicTracks[index];
+    if (!track || targetFolder === track.folder) return;
+
+    fetch('/moveMusic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: track.filename, folder: targetFolder }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        if (data.success) {
+          this.refreshMusicList();
+        } else {
+          alert(data.message || `Failed to move "${track.name}".`);
+        }
+      })
+      .catch((err) => {
+        console.error('Error moving music track:', err);
+        alert(`Error moving "${track.name}". Check the console for details.`);
+      });
+  }
+
+  createFolder() {
+    const name = prompt('Enter a name for the new music folder:');
+    if (!name || !name.trim()) return;
+
+    fetch('/musicFolder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.success) {
+          this.refreshMusicList().then(() => {
+            this.currentFolder = name.trim();
+            this._refreshFolderSelect();
+          });
+        } else {
+          alert(data.message || 'Failed to create folder.');
+        }
+      })
+      .catch((err) => {
+        console.error('Error creating music folder:', err);
+        alert('Error creating folder. Check the console for details.');
+      });
+  }
+
+  deleteFolder(folderName) {
+    if (!confirm(`Delete folder "${folderName}" and all its tracks?`)) return;
+
+    fetch('/musicFolder', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: folderName }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.success) {
+          this.refreshMusicList();
+        } else {
+          alert(data.message || 'Failed to delete folder.');
+        }
+      })
+      .catch((err) => {
+        console.error('Error deleting music folder:', err);
+        alert('Error deleting folder. Check the console for details.');
+      });
+  }
+
+  refreshMusicList() {
+    return fetch('/musicList')
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.success) {
+          this.loadFromResponse(data);
+        }
+      })
+      .catch((err) => {
+        console.error('Error refreshing music list:', err);
+      });
+  }
 }

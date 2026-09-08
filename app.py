@@ -76,10 +76,24 @@ class WallDict(TypedDict):
     points: List[WallPointDict]
 
 
+class TurnTrackerEntryDict(TypedDict):
+    tokenId: str
+    initiative: int
+    disabled: bool
+
+
+class TurnTrackerDict(TypedDict):
+    order: List[TurnTrackerEntryDict]
+    activeIndex: int
+    round: int
+    title: str
+
+
 class SceneDict(_SceneDictRequired, total=False):
     order: int
     walls: List[WallDict]
     fogOpacity: float
+    turnTracker: Optional[TurnTrackerDict]
 
 
 class _StickyNoteDictRequired(TypedDict):
@@ -577,6 +591,15 @@ def safe_relative_player_media_path(url: Optional[str]) -> Optional[str]:
     return rel
 
 
+def safe_relative_music_path(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    rel = Path(str(value)).as_posix()
+    if ".." in rel or rel.startswith(("/", "\\")):
+        return None
+    return rel
+
+
 def get_media_type(name: str) -> Optional[str]:
     ext = Path(name).suffix.lower()
     if ext in IMAGE_EXTS:
@@ -686,6 +709,8 @@ class SceneStore:
             scene = self.scenes[scene_id]
             scene.setdefault("walls", [])
             scene.setdefault("fogOpacity", 1.0)
+            scene.setdefault("turnTracker", {"order": [], "activeIndex": 0, "round": 1})
+            self._sort_turn_tracker(scene)
             return scene
         path = self.path_for(scene_id)
         try:
@@ -695,8 +720,19 @@ class SceneStore:
             raise
         scene.setdefault("walls", [])
         scene.setdefault("fogOpacity", 1.0)
+        scene.setdefault("turnTracker", {"order": [], "activeIndex": 0, "round": 1})
+        self._sort_turn_tracker(scene)
         self.scenes[scene_id] = scene
         return scene
+
+    def _sort_turn_tracker(self, scene: SceneDict) -> None:
+        tracker = scene.get("turnTracker")
+        if not tracker:
+            return
+        order = tracker.get("order", [])
+        if not order:
+            return
+        order.sort(key=lambda entry: entry.get("initiative", 0), reverse=True)
 
     def save_scene(self, scene: SceneDict, count_save: bool = True) -> None:
         self.paths.scenes_dir.mkdir(parents=True, exist_ok=True)
@@ -964,6 +1000,167 @@ class SceneStore:
         self.save_scene(scene)
         return clamped
 
+    def _ensure_turn_tracker(self, scene: SceneDict) -> TurnTrackerDict:
+        tracker = scene.setdefault("turnTracker", {"order": [], "activeIndex": 0, "round": 1, "title": ""})
+        tracker.setdefault("title", "")
+        return tracker
+
+    def set_initiative(self, scene_id: SceneId, token_id: str, initiative: Optional[int]) -> Optional[TurnTrackerDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        token = next((t for t in scene.get("tokens", []) if t.get("tokenId") == token_id), None)
+        if token is None:
+            return None
+        tracker = self._ensure_turn_tracker(scene)
+        order = tracker.setdefault("order", [])
+        existing = next((entry for entry in order if entry.get("tokenId") == token_id), None)
+        if initiative is None:
+            if existing is not None:
+                order.remove(existing)
+        else:
+            if existing is not None:
+                existing["initiative"] = int(initiative)
+            else:
+                order.append({"tokenId": token_id, "initiative": int(initiative), "disabled": False})
+        order.sort(key=lambda entry: entry["initiative"], reverse=True)
+        self.save_scene(scene)
+        return tracker
+
+    def _next_active_index(self, order: List[TurnTrackerEntryDict], start: int, step: int = 1) -> int:
+        """Return the next active index after `start` that is not disabled, wrapping once.
+        If all entries are disabled, returns the original `start`.
+        """
+        if not order:
+            return 0
+        count = len(order)
+        for i in range(1, count + 1):
+            idx = (start + i * step) % count
+            if not order[idx].get("disabled"):
+                return idx
+        return start
+
+    def advance_turn(self, scene_id: SceneId) -> Optional[TurnTrackerDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        order = tracker.get("order", [])
+        if not order:
+            return tracker
+        current = int(tracker.get("activeIndex", 0))
+        next_idx = self._next_active_index(order, current, step=1)
+        if next_idx <= current:
+            tracker["round"] = int(tracker.get("round", 1)) + 1
+        tracker["activeIndex"] = next_idx
+        self.save_scene(scene)
+        return tracker
+
+    def previous_turn(self, scene_id: SceneId) -> Optional[TurnTrackerDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        order = tracker.get("order", [])
+        if not order:
+            return tracker
+        current = int(tracker.get("activeIndex", 0))
+        prev_idx = self._next_active_index(order, current, step=-1)
+        if prev_idx >= current:
+            tracker["round"] = max(1, int(tracker.get("round", 1)) - 1)
+        tracker["activeIndex"] = prev_idx
+        self.save_scene(scene)
+        return tracker
+
+    def set_active_turn(self, scene_id: SceneId, token_id: str) -> Optional[TurnTrackerDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        order = tracker.get("order", [])
+        for index, entry in enumerate(order):
+            if entry.get("tokenId") == token_id and not entry.get("disabled"):
+                tracker["activeIndex"] = index
+                self.save_scene(scene)
+                return tracker
+        return tracker
+
+    def toggle_turn_tracker_entry(self, scene_id: SceneId, token_id: str) -> Optional[TurnTrackerDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        order = tracker.get("order", [])
+        entry = next((e for e in order if e.get("tokenId") == token_id), None)
+        if entry is None:
+            return tracker
+        entry["disabled"] = not entry.get("disabled", False)
+        if entry.get("disabled") and tracker.get("activeIndex", 0) == order.index(entry):
+            tracker["activeIndex"] = self._next_active_index(order, tracker["activeIndex"], step=1)
+        self.save_scene(scene)
+        return tracker
+
+    def reset_turn_tracker(self, scene_id: SceneId) -> Optional[TurnTrackerDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        tracker["activeIndex"] = 0
+        tracker["round"] = 1
+        self.save_scene(scene)
+        return tracker
+
+    def set_turn_tracker_title(self, scene_id: SceneId, title: str) -> Optional[TurnTrackerDict]:
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        tracker["title"] = (title or "").strip()
+        self.save_scene(scene)
+        return tracker
+
+    def clear_scene_initiative(self, scene_id: SceneId) -> Optional[TurnTrackerDict]:
+        """Clear initiative values from every token and empty the turn tracker."""
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        tracker["order"] = []
+        tracker["activeIndex"] = 0
+        tracker["round"] = 1
+        for token in scene.get("tokens", []):
+            token["initiative"] = None
+        self.save_scene(scene)
+        return tracker
+
+    def get_turn_order_for_role(
+        self,
+        scene_id: SceneId,
+        include_hidden: bool = False,
+        include_disabled: bool = False,
+    ) -> Tuple[List[TurnTrackerEntryDict], int, int]:
+        """Return the turn order subset appropriate for a client role.
+
+        Stale token IDs are kept in storage; only entries whose token still
+        exists and matches the visibility filter are returned. Disabled entries
+        are skipped unless `include_disabled` is True. The active index is
+        adjusted to the first kept entry at or after the stored active index.
+        """
+        scene = self.scenes.get(scene_id) or self.load_scene(scene_id)
+        tracker = self._ensure_turn_tracker(scene)
+        tokens = {t.get("tokenId"): t for t in scene.get("tokens", []) if t.get("tokenId")}
+        order = tracker.get("order", [])
+        raw_active = int(tracker.get("activeIndex", 0))
+        round_num = int(tracker.get("round", 1))
+
+        kept_with_index: List[Tuple[int, TurnTrackerEntryDict]] = []
+        for index, entry in enumerate(order):
+            if not include_disabled and entry.get("disabled"):
+                continue
+            token = tokens.get(entry.get("tokenId"))
+            if token is None:
+                continue
+            if not include_hidden and not is_token_visible_to_players(token):
+                continue
+            kept_with_index.append((index, entry))
+
+        if not kept_with_index:
+            return [], 0, round_num
+
+        adjusted = 0
+        for idx, (original_index, _entry) in enumerate(kept_with_index):
+            if original_index >= raw_active:
+                adjusted = idx
+                break
+        else:
+            adjusted = 0
+
+        return [entry for _original_index, entry in kept_with_index], adjusted, round_num
+
 
 class SceneHistory:
     """Server-side undo/redo of token-property mutations, per scene.
@@ -1200,6 +1397,20 @@ def player_files_page() -> RouteReturn:
     return send_from_directory(UI_PUBLIC_DIR, "player-files.html")
 
 
+@app.get("/turn-tracker")
+def turn_tracker_page() -> RouteReturn:
+    if not require_player():
+        return redirect("/player-login")
+    return send_from_directory(UI_PUBLIC_DIR, "turn-tracker.html")
+
+
+@app.get("/api/session")
+def session_info() -> RouteReturn:
+    if not require_player():
+        return redirect("/player-login")
+    return jsonify({"isDM": bool(session.get("isDM")), "isPlayer": bool(session.get("isPlayer"))})
+
+
 @app.post("/createScene")
 def create_scene() -> RouteReturn:
     if not require_dm():
@@ -1212,6 +1423,7 @@ def create_scene() -> RouteReturn:
         "tokens": [],
         "folder": "",
         "order": len(scene_store.get_all_scenes()),
+        "turnTracker": {"order": [], "activeIndex": 0, "round": 1, "title": ""},
     }
     scene_store.save_scene(scene, count_save=False)
     scene_store.add_scene(scene)
@@ -1391,6 +1603,17 @@ def upload_file() -> RouteReturn:
     return jsonify({"imageUrl": f"/uploads/{filename}", "mediaType": media_type})
 
 
+def _build_music_track(path: Path, rel_prefix: str = "") -> Dict[str, str]:
+    display_name = re.sub(r"^\d+\s*[-_]?\s*", "", path.name)
+    rel_name = f"{rel_prefix}/{path.name}" if rel_prefix else path.name
+    return {
+        "name": display_name,
+        "filename": rel_name,
+        "url": f"/music/{rel_name}",
+        "folder": rel_prefix,
+    }
+
+
 @app.post("/uploadMusic")
 def upload_music() -> RouteReturn:
     if not require_dm():
@@ -1401,37 +1624,94 @@ def upload_music() -> RouteReturn:
     mime_type = file.mimetype or ""
     if not mime_type.startswith("audio/"):
         return jsonify({"success": False, "message": "Unsupported file type"}), 400
-    campaign_paths.music_dir.mkdir(parents=True, exist_ok=True)
+    folder = safe_folder_name(request.args.get("folder"))
+    dest = campaign_paths.music_dir / folder if folder else campaign_paths.music_dir
+    dest.mkdir(parents=True, exist_ok=True)
     filename = f"{now_ms()}-{secure_filename(file.filename)}"
-    file.save(campaign_paths.music_dir / filename)
-    return jsonify({"success": True, "musicUrl": f"/music/{filename}", "filename": filename})
+    file.save(dest / filename)
+    saved_name = f"{folder}/{filename}" if folder else filename
+    return jsonify({
+        "success": True,
+        "musicUrl": f"/music/{saved_name}",
+        "filename": saved_name,
+        "displayName": re.sub(r"^\d+\s*[-_]?\s*", "", file.filename),
+    })
 
 
 @app.get("/musicList")
 def music_list() -> RouteReturn:
+    if not require_player():
+        return redirect("/player-login")
     campaign_paths.music_dir.mkdir(parents=True, exist_ok=True)
-    tracks = []
-    for path in campaign_paths.music_dir.iterdir():
-        if path.is_file() and path.suffix.lower() in MUSIC_EXTS:
-            tracks.append({
-                "name": re.sub(r"^\d+\s*[-_]?\s*", "", path.name),
-                "filename": path.name,
-                "url": f"/music/{path.name}",
-            })
-    return jsonify({"success": True, "musicTracks": tracks})
+    folders = []
+    root_files = []
+    for entry in campaign_paths.music_dir.iterdir():
+        if entry.name.startswith("."):
+            continue
+        if entry.is_dir():
+            files = [_build_music_track(sub, entry.name) for sub in entry.iterdir()
+                     if sub.is_file() and not sub.name.startswith(".") and sub.suffix.lower() in MUSIC_EXTS]
+            folders.append({"name": entry.name, "files": files})
+        elif entry.is_file() and entry.suffix.lower() in MUSIC_EXTS:
+            root_files.append(_build_music_track(entry))
+    return jsonify({"success": True, "folders": folders, "rootFiles": root_files})
 
 
 @app.post("/deleteMusic")
 def delete_music() -> RouteReturn:
     if not require_dm():
         return redirect("/dm-login")
-    filename = Path(json_body().get("filename") or "").name
-    if not filename:
-        return jsonify({"success": False, "message": "No filename provided."}), 400
-    path = campaign_paths.music_dir / filename
-    if not path.exists():
+    rel = safe_relative_music_path(json_body().get("filename"))
+    if not rel:
+        return jsonify({"success": False, "message": "Invalid filename."}), 400
+    path = campaign_paths.music_dir / rel
+    if not path.is_file():
         return jsonify({"success": False, "message": "File not found."}), 404
     path.unlink()
+    return jsonify({"success": True})
+
+
+@app.post("/moveMusic")
+def move_music() -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    data = json_body()
+    rel = safe_relative_music_path(data.get("filename"))
+    if not rel:
+        return jsonify({"success": False, "message": "Invalid filename."}), 400
+    source = campaign_paths.music_dir / rel
+    if not source.is_file():
+        return jsonify({"success": False, "message": "File not found."}), 404
+
+    folder = safe_folder_name(data.get("folder"))
+    dest_dir = campaign_paths.music_dir / folder if folder else campaign_paths.music_dir
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / source.name
+    if dest.exists():
+        return jsonify({"success": False, "message": "A file with that name already exists in the destination."}), 409
+    source.rename(dest)
+    return jsonify({"success": True})
+
+
+@app.post("/musicFolder")
+def music_folder_create() -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    name = safe_folder_name(json_body().get("name"))
+    if not name:
+        return jsonify({"success": False, "message": "Invalid folder name"}), 400
+    (campaign_paths.music_dir / name).mkdir(parents=True, exist_ok=True)
+    return jsonify({"success": True})
+
+
+@app.delete("/musicFolder")
+def music_folder_delete() -> RouteReturn:
+    if not require_dm():
+        return redirect("/dm-login")
+    name = safe_folder_name(json_body().get("name"))
+    if not name:
+        return jsonify({"success": False, "message": "Invalid folder name"}), 400
+    shutil.rmtree(campaign_paths.music_dir / name, ignore_errors=True)
     return jsonify({"success": True})
 
 
@@ -1774,6 +2054,8 @@ def socket_connect() -> None:
     role = request.args.get("role") or "player"
     socket_roles[request.sid] = role
     join_room(role)
+    if role == "tracker":
+        join_room("tracker")
     emit("activeSceneId", scene_store.active_scene_id)
     if bg_color:
         emit("setBgColor", {"color": bg_color})
@@ -1788,18 +2070,96 @@ def socket_disconnect() -> None:
     socket_roles.pop(request.sid, None)
 
 
+def _filter_turn_tracker_for_role(scene: SceneDict, role: str) -> Optional[TurnTrackerDict]:
+    """Build a tracker payload appropriate for the client role.
+
+    - DM sees all entries, including hidden and disabled tokens.
+    - Tracker and player pages see only visible, non-disabled entries.
+    """
+    if role == "dm":
+        order, active_index, round_num = scene_store.get_turn_order_for_role(
+            scene["sceneId"], include_hidden=True, include_disabled=True
+        )
+    elif role == "tracker":
+        # Tracker screen is a tactical management display; show disabled/KO rows
+        # but still hide hidden tokens from the player-auth route.
+        order, active_index, round_num = scene_store.get_turn_order_for_role(
+            scene["sceneId"], include_hidden=False, include_disabled=True
+        )
+    else:
+        order, active_index, round_num = scene_store.get_turn_order_for_role(
+            scene["sceneId"], include_hidden=False, include_disabled=False
+        )
+    return {"order": order, "activeIndex": active_index, "round": round_num}
+
+
+def _broadcast_turn_tracker_update(scene_id: SceneId) -> None:
+    """Emit the turn tracker state to all connected clients.
+
+    Each role receives the subset it is allowed to see (DM vs player/tracker).
+    """
+    if scene_store is None:
+        return
+    try:
+        scene = scene_store.load_scene(scene_id)
+    except Exception:
+        return
+    dm_tracker = _filter_turn_tracker_for_role(scene, "dm")
+    player_tracker = _filter_turn_tracker_for_role(scene, "player")
+    socketio.emit(
+        "turnTrackerUpdate",
+        {"sceneId": scene_id, "turnTracker": dm_tracker},
+        to="dm",
+        include_self=True,
+    )
+    socketio.emit(
+        "turnTrackerUpdate",
+        {"sceneId": scene_id, "turnTracker": player_tracker},
+        to="player",
+        include_self=True,
+    )
+    socketio.emit(
+        "turnTrackerUpdate",
+        {"sceneId": scene_id, "turnTracker": player_tracker},
+        to="tracker",
+        include_self=True,
+    )
+
+
 @socketio.on("loadScene")
 def socket_load_scene(data: Optional[Dict[str, Any]]) -> None:
     try:
         scene = scene_store.load_scene((data or {}).get("sceneId"))
-        if socket_roles.get(request.sid) == "player":
+        role = socket_roles.get(request.sid) or "player"
+        if role == "player":
             filtered = dict(scene)
             filtered["tokens"] = [token for token in scene.get("tokens", []) if is_token_visible_to_players(token)]
             filtered.pop("walls", None)
+            tracker = _filter_turn_tracker_for_role(scene, role)
+            if tracker is not None:
+                filtered["turnTracker"] = tracker
+            else:
+                filtered.pop("turnTracker", None)
             emit("sceneData", filtered)
             emit("wallsData", {"sceneId": scene["sceneId"], "walls": scene.get("walls", [])})
+        elif role == "tracker":
+            filtered = dict(scene)
+            filtered["tokens"] = [token for token in scene.get("tokens", []) if is_token_visible_to_players(token)]
+            filtered.pop("walls", None)
+            tracker = _filter_turn_tracker_for_role(scene, role)
+            if tracker is not None:
+                filtered["turnTracker"] = tracker
+            else:
+                filtered.pop("turnTracker", None)
+            emit("sceneData", filtered)
         else:
-            emit("sceneData", scene)
+            tracker = _filter_turn_tracker_for_role(scene, role)
+            if tracker is not None:
+                scene_with_tracker = dict(scene)
+                scene_with_tracker["turnTracker"] = tracker
+                emit("sceneData", scene_with_tracker)
+            else:
+                emit("sceneData", scene)
     except Exception:
         emit("error", {"message": "Failed to load scene."})
 
@@ -1842,6 +2202,8 @@ def socket_update_token(data: Optional[Dict[str, Any]]) -> None:
         else:
             emit("removeToken", {"sceneId": scene_id, "tokenId": token_id}, to="player", include_self=False)
             emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, to="dm", include_self=False)
+        # Visibility changes affect which tokens appear in the turn tracker.
+        _broadcast_turn_tracker_update(scene_id)
     elif is_visible:
         emit("updateToken", {"sceneId": scene_id, "tokenId": token_id, "properties": properties}, broadcast=True, include_self=False)
     else:
@@ -1877,6 +2239,13 @@ def socket_remove_token(data: Optional[Dict[str, Any]]) -> None:
     removed = scene_store.remove_token(scene_id, token_id)
     if removed is not None:
         history.record_pending_deletion(scene_id, removed.get("imageUrl"))
+        # Clean up the turn tracker order so the active index stays consistent.
+        scene = scene_store.load_scene(scene_id)
+        tracker = scene.get("turnTracker")
+        if tracker:
+            tracker["order"] = [entry for entry in tracker.get("order", []) if entry.get("tokenId") != token_id]
+            scene_store.save_scene(scene)
+            _broadcast_turn_tracker_update(scene_id)
         socketio.emit("removeToken", {"sceneId": scene_id, "tokenId": token_id})
     can_undo, can_redo = history.state(scene_id)
     socketio.emit("undoRedoState", {"canUndo": can_undo, "canRedo": can_redo}, to="dm")
@@ -2003,6 +2372,135 @@ def socket_update_initiative(data: Optional[Dict[str, Any]]) -> None:
         return
     initiative_state = data
     socketio.emit("updateInitiative", data)
+
+
+@socketio.on("setInitiative")
+def socket_set_initiative(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    data = data or {}
+    scene_id = data.get("sceneId")
+    token_id = data.get("tokenId")
+    raw = data.get("initiative")
+    if raw is None:
+        initiative = None
+    else:
+        try:
+            initiative = int(raw)
+        except (TypeError, ValueError):
+            return
+    if not scene_id or not token_id:
+        return
+    tracker = scene_store.set_initiative(scene_id, token_id, initiative)
+    if tracker is None:
+        return
+    _broadcast_turn_tracker_update(scene_id)
+
+
+@socketio.on("advanceTurn")
+def socket_advance_turn(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    if not scene_id:
+        return
+    tracker = scene_store.advance_turn(scene_id)
+    if tracker is None:
+        return
+    _broadcast_turn_tracker_update(scene_id)
+
+
+@socketio.on("resetTurnTracker")
+def socket_reset_turn_tracker(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    if not scene_id:
+        return
+    tracker = scene_store.reset_turn_tracker(scene_id)
+    if tracker is None:
+        return
+    _broadcast_turn_tracker_update(scene_id)
+
+
+@socketio.on("previousTurn")
+def socket_previous_turn(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    if not scene_id:
+        return
+    tracker = scene_store.previous_turn(scene_id)
+    if tracker is None:
+        return
+    _broadcast_turn_tracker_update(scene_id)
+
+
+@socketio.on("setActiveTurn")
+def socket_set_active_turn(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    token_id = (data or {}).get("tokenId")
+    if not scene_id or not token_id:
+        return
+    tracker = scene_store.set_active_turn(scene_id, token_id)
+    if tracker is None:
+        return
+    _broadcast_turn_tracker_update(scene_id)
+
+
+@socketio.on("toggleTurnTrackerEntry")
+def socket_toggle_turn_tracker_entry(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    token_id = (data or {}).get("tokenId")
+    if not scene_id or not token_id:
+        return
+    tracker = scene_store.toggle_turn_tracker_entry(scene_id, token_id)
+    if tracker is None:
+        return
+    _broadcast_turn_tracker_update(scene_id)
+
+
+@socketio.on("setTurnTrackerTitle")
+def socket_set_turn_tracker_title(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    title = (data or {}).get("title", "")
+    if not scene_id:
+        return
+    tracker = scene_store.set_turn_tracker_title(scene_id, title)
+    if tracker is None:
+        return
+    _broadcast_turn_tracker_update(scene_id)
+
+
+@socketio.on("clearSceneInitiative")
+def socket_clear_scene_initiative(data: Optional[Dict[str, Any]]) -> None:
+    if not is_dm_socket():
+        return
+    scene_id = (data or {}).get("sceneId")
+    if not scene_id:
+        return
+    tracker = scene_store.clear_scene_initiative(scene_id)
+    if tracker is None:
+        return
+    # Tokens changed their initiative value, so refresh the scene payload too.
+    scene = scene_store.load_scene(scene_id)
+    socketio.emit("sceneData", scene, to="dm", include_self=True)
+    socketio.emit(
+        "sceneData",
+        {
+            "sceneId": scene["sceneId"],
+            "tokens": [t for t in scene.get("tokens", []) if is_token_visible_to_players(t)],
+        },
+        to="player",
+        include_self=True,
+    )
+    _broadcast_turn_tracker_update(scene_id)
 
 
 @socketio.on("toggleGrid")
@@ -2147,7 +2645,7 @@ def main() -> None:
     app.config["DM_PASSWORD"] = secrets.get("DM_PASSWORD") or DEFAULT_SECRETS["DM_PASSWORD"]
     app.config["PLAYER_PASSWORD"] = secrets.get("PLAYER_PASSWORD") or DEFAULT_SECRETS["PLAYER_PASSWORD"]
 
-    port = int(os.environ.get("VTT_PORT", "3000"))
+    port = int(os.environ.get("VTT_PORT", "3001"))
     print(f"Passwords loaded from: {SECRET_FILE}")
     print(f"Project folder: {BASE_DIR}")
     print(f"Public folder: {UI_PUBLIC_DIR}")

@@ -4,7 +4,7 @@
 # same steps: create venv, install deps, run app.py.
 #
 # Usage:
-#   ./run_dev.sh            # default port 3000
+#   ./run_dev.sh            # default port 3001
 #   ./run_dev.sh 3100       # custom port (overrides VTT_PORT env)
 #   VTT_PORT=3200 ./run_dev.sh
 #
@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PORT="${1:-${VTT_PORT:-3000}}"
+PORT="${1:-${VTT_PORT:-3001}}"
 
 # 1. Ensure virtualenv exists (creates on first run only)
 if [ ! -d ".venv" ]; then
