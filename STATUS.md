@@ -2,13 +2,13 @@
 
 > Fuente de verdad del estado actual. Actualizar al final de cada sesión.
 
-**Última actualización**: 2026-08-08
+**Última actualización**: 2026-10-12
 
 ---
 
 ## Dónde estamos
 
-Feature **Turn Tracker** implementada y completa (al 2026-08-01) pero **sin commitear**: el working tree tiene 11 cambios pendientes que conforman la feature entera.
+**Servidor local parado** — el puerto 3001 no está en ejecución (Flask arranca on-demand para campañas). **Turn Tracker commiteado** (PR #9, `9ada3b1` feat: add standalone turn tracker + music folder support). El STATUS anterior lo declaraba "sin commitear" — drift verificado y corregido el 2026-10-12.
 
 ---
 
@@ -28,7 +28,7 @@ Feature **Turn Tracker** implementada y completa (al 2026-08-01) pero **sin comm
 
 ## Próximo paso concreto
 
-- Commitear la feature completa (11 archivos) y verificar end-to-end: ruta protegida, `role=tracker` y persistencia por escena
+- Arrancar el server on-demand y verificar end-to-end el Turn Tracker: ruta protegida, `role=tracker` y persistencia por escena
 
 ---
 
